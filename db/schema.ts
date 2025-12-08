@@ -12,6 +12,8 @@ export const gameSessions = pgTable("game_sessions", {
   totalCost: real("total_cost").default(0),
   totalTokens: integer("total_tokens").default(0),
   totalTimeMs: integer("total_time_ms"),
+  anonId: text("anon_id"),
+  clerkUserId: text("clerk_user_id"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
