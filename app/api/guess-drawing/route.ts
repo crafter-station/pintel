@@ -79,7 +79,6 @@ export async function POST(request: Request) {
                   ],
                 },
               ],
-              maxTokens: 50,
               temperature: 0.3,
             });
 
@@ -99,8 +98,8 @@ export async function POST(request: Request) {
 
             const generationTimeMs = Date.now() - modelStartTime;
             const usage = await result.usage;
-            const inputTokens = usage?.promptTokens ?? 0;
-            const outputTokens = usage?.completionTokens ?? 0;
+            const inputTokens = usage?.inputTokens ?? 0;
+            const outputTokens = usage?.outputTokens ?? 0;
             const cost = calculateCost(model.id, inputTokens, outputTokens);
 
             completedCount++;
