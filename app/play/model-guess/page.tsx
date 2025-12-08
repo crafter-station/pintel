@@ -25,6 +25,8 @@ import {
 } from "@/lib/models";
 import { DrawingCanvas } from "@/components/drawing-canvas";
 import { useSaveSession } from "@/lib/hooks/use-gallery";
+import { useUserIdentity } from "@/lib/hooks/use-user-identity";
+import { SignupPrompt } from "@/components/signup-prompt";
 import {
   ArrowLeft,
   Play,
@@ -74,6 +76,9 @@ interface GuessingModel {
 
 export default function ModelGuessPage() {
   const saveSession = useSaveSession();
+  const { isAuthenticated } = useUserIdentity();
+  const [showSignupPrompt, setShowSignupPrompt] = useState(false);
+  const [hasShownPrompt, setHasShownPrompt] = useState(false);
   const [gameState, setGameState] = useState<GameState>({
     status: "setup",
     prompt: "",
@@ -276,15 +281,26 @@ export default function ModelGuessPage() {
         })),
       });
 
-      setGameState((prev) => ({
-        ...prev,
-        status: "results",
-        guesses: completedGuesses,
-        leaderboard: newLeaderboard,
-        roundsPlayed: prev.roundsPlayed + 1,
-        totalCost: prev.totalCost + totalCost,
-        totalTokens: prev.totalTokens + totalTokens,
-      }));
+      setGameState((prev) => {
+        const newState = {
+          ...prev,
+          status: "results" as const,
+          guesses: completedGuesses,
+          leaderboard: newLeaderboard,
+          roundsPlayed: prev.roundsPlayed + 1,
+          totalCost: prev.totalCost + totalCost,
+          totalTokens: prev.totalTokens + totalTokens,
+        };
+        
+        if (!isAuthenticated && !hasShownPrompt) {
+          setTimeout(() => {
+            setShowSignupPrompt(true);
+            setHasShownPrompt(true);
+          }, 1000);
+        }
+        
+        return newState;
+      });
     } catch (error) {
       console.error("Error:", error);
       setGameState((prev) => ({
@@ -745,6 +761,7 @@ export default function ModelGuessPage() {
           )}
         </div>
       </main>
+      <SignupPrompt open={showSignupPrompt} onOpenChange={setShowSignupPrompt} />
     </TooltipProvider>
   );
 }

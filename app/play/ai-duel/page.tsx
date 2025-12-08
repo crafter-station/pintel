@@ -24,6 +24,8 @@ import {
   type ModelConfig,
 } from "@/lib/models";
 import { useSaveSession } from "@/lib/hooks/use-gallery";
+import { useUserIdentity } from "@/lib/hooks/use-user-identity";
+import { SignupPrompt } from "@/components/signup-prompt";
 import {
   ArrowLeft,
   Play,
@@ -71,6 +73,8 @@ interface RoundResult {
 
 export default function AIDuelPage() {
   const saveSession = useSaveSession();
+  const { isAuthenticated } = useUserIdentity();
+  const [showSignupPrompt, setShowSignupPrompt] = useState(false);
   const [state, setState] = useState<DuelState>({
     status: "setup",
     selectedModels: DEFAULT_VISION_MODELS,
@@ -395,14 +399,20 @@ export default function AIDuelPage() {
         })),
       });
 
-      setState((prev) => ({
-        ...prev,
-        leaderboard: finalLeaderboard,
-        totalCost: prev.totalCost + guessCost,
-        totalTokens: prev.totalTokens + guessTokens,
-        roundHistory: [...prev.roundHistory, roundResult],
-        status: roundNum >= prev.totalRounds ? "finished" : "round-end",
-      }));
+      setState((prev) => {
+        const isFinished = roundNum >= prev.totalRounds;
+        if (isFinished && !isAuthenticated) {
+          setTimeout(() => setShowSignupPrompt(true), 1000);
+        }
+        return {
+          ...prev,
+          leaderboard: finalLeaderboard,
+          totalCost: prev.totalCost + guessCost,
+          totalTokens: prev.totalTokens + guessTokens,
+          roundHistory: [...prev.roundHistory, roundResult],
+          status: isFinished ? "finished" : "round-end",
+        };
+      });
 
       setPhaseStatus("idle");
 
@@ -922,6 +932,7 @@ export default function AIDuelPage() {
           )}
         </div>
       </main>
+      <SignupPrompt open={showSignupPrompt} onOpenChange={setShowSignupPrompt} />
     </TooltipProvider>
   );
 }
