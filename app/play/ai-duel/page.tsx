@@ -23,6 +23,9 @@ import {
   shuffleModels,
   type ModelConfig,
 } from "@/lib/models";
+import { useSaveSession } from "@/lib/hooks/use-gallery";
+import { useUserIdentity } from "@/lib/hooks/use-user-identity";
+import { SignupPrompt } from "@/components/signup-prompt";
 import {
   ArrowLeft,
   Play,
@@ -69,6 +72,9 @@ interface RoundResult {
 }
 
 export default function AIDuelPage() {
+  const saveSession = useSaveSession();
+  const { isAuthenticated } = useUserIdentity();
+  const [showSignupPrompt, setShowSignupPrompt] = useState(false);
   const [state, setState] = useState<DuelState>({
     status: "setup",
     selectedModels: DEFAULT_VISION_MODELS,
@@ -181,30 +187,6 @@ export default function AIDuelPage() {
     }));
   }, []);
 
-  const startDuel = useCallback(() => {
-    if (state.selectedModels.length < 3) return;
-
-    // Initialize leaderboard
-    const initialLeaderboard: DuelState["leaderboard"] = {};
-    state.selectedModels.forEach((id) => {
-      initialLeaderboard[id] = { draws: 0, correctGuesses: 0, points: 0 };
-    });
-
-    setState((prev) => ({
-      ...prev,
-      status: "running",
-      currentRound: 1,
-      leaderboard: initialLeaderboard,
-      roundHistory: [],
-      totalCost: 0,
-      totalTokens: 0,
-      autoPlay: true,
-    }));
-
-    // Start first round
-    runRound(state.selectedModels[0], state.selectedModels, initialLeaderboard, 1);
-  }, [state.selectedModels, runRound]);
-
   const runRound = useCallback(async (
     drawerId: string,
     models: string[],
@@ -242,6 +224,7 @@ export default function AIDuelPage() {
       let finalSvg = "";
       let drawCost = 0;
       let drawTokens = 0;
+      const drawChunks: string[] = []; // Track chunks for replay
 
       while (true) {
         const { done, value } = await reader.read();
@@ -256,6 +239,7 @@ export default function AIDuelPage() {
           try {
             const event = JSON.parse(line.slice(6));
             if (event.type === "partial" && event.svg) {
+              drawChunks.push(event.svg); // Collect chunks for replay
               setState((prev) => ({ ...prev, currentSvg: event.svg }));
             } else if (event.type === "drawing") {
               finalSvg = event.svg;
@@ -300,7 +284,7 @@ export default function AIDuelPage() {
       if (!guessReader) throw new Error("No response body");
 
       let guessBuffer = "";
-      const roundGuesses: Record<string, { guess: string; isCorrect: boolean; timeMs: number }> = {};
+      const roundGuesses: Record<string, { guess: string; isCorrect: boolean; timeMs: number; cost?: number; tokens?: number }> = {};
       let guessCost = 0;
       let guessTokens = 0;
 
@@ -333,6 +317,8 @@ export default function AIDuelPage() {
                 guess: event.guess,
                 isCorrect,
                 timeMs: event.generationTimeMs,
+                cost: event.cost,
+                tokens: event.usage?.totalTokens,
               };
               setState((prev) => ({
                 ...prev,
@@ -385,14 +371,48 @@ export default function AIDuelPage() {
         winner,
       };
 
-      setState((prev) => ({
-        ...prev,
-        leaderboard: finalLeaderboard,
-        totalCost: prev.totalCost + guessCost,
-        totalTokens: prev.totalTokens + guessTokens,
-        roundHistory: [...prev.roundHistory, roundResult],
-        status: roundNum >= prev.totalRounds ? "finished" : "round-end",
-      }));
+      // Auto-save each round to gallery (outside of state updater to avoid duplicate calls)
+      saveSession.mutate({
+        mode: "ai_duel",
+        prompt,
+        totalCost: drawCost + guessCost,
+        totalTokens: drawTokens + guessTokens,
+        totalTimeMs: (drawTokens + guessTokens) * 10, // Approximate
+        drawings: [
+          {
+            modelId: drawerId,
+            svg: finalSvg,
+            generationTimeMs: drawTokens * 10, // Approximate
+            cost: drawCost,
+            tokens: drawTokens,
+            isWinner: !winner, // Drawer wins if no one guessed correctly
+            chunks: drawChunks,
+          },
+        ],
+        guesses: Object.entries(roundGuesses).map(([modelId, g]) => ({
+          modelId,
+          guess: g.guess,
+          isCorrect: g.isCorrect,
+          generationTimeMs: g.timeMs,
+          cost: g.cost,
+          tokens: g.tokens,
+        })),
+      });
+
+      setState((prev) => {
+        const isFinished = roundNum >= prev.totalRounds;
+        if (isFinished && !isAuthenticated) {
+          setTimeout(() => setShowSignupPrompt(true), 1000);
+        }
+        return {
+          ...prev,
+          leaderboard: finalLeaderboard,
+          totalCost: prev.totalCost + guessCost,
+          totalTokens: prev.totalTokens + guessTokens,
+          roundHistory: [...prev.roundHistory, roundResult],
+          status: isFinished ? "finished" : "round-end",
+        };
+      });
 
       setPhaseStatus("idle");
 
@@ -414,7 +434,31 @@ export default function AIDuelPage() {
       setPhaseStatus("idle");
       setState((prev) => ({ ...prev, status: "paused" }));
     }
-  }, [state.totalRounds, state.autoPlay, state.speed, svgToPng]);
+  }, [state.totalRounds, state.autoPlay, state.speed, svgToPng, saveSession]);
+
+  const startDuel = useCallback(() => {
+    if (state.selectedModels.length < 3) return;
+
+    // Initialize leaderboard
+    const initialLeaderboard: DuelState["leaderboard"] = {};
+    state.selectedModels.forEach((id) => {
+      initialLeaderboard[id] = { draws: 0, correctGuesses: 0, points: 0 };
+    });
+
+    setState((prev) => ({
+      ...prev,
+      status: "running",
+      currentRound: 1,
+      leaderboard: initialLeaderboard,
+      roundHistory: [],
+      totalCost: 0,
+      totalTokens: 0,
+      autoPlay: true,
+    }));
+
+    // Start first round
+    runRound(state.selectedModels[0], state.selectedModels, initialLeaderboard, 1);
+  }, [state.selectedModels, runRound]);
 
   const continueToNextRound = useCallback(() => {
     const nextDrawerIndex = (state.selectedModels.indexOf(state.currentDrawer!) + 1) % state.selectedModels.length;
@@ -888,6 +932,7 @@ export default function AIDuelPage() {
           )}
         </div>
       </main>
+      <SignupPrompt open={showSignupPrompt} onOpenChange={setShowSignupPrompt} />
     </TooltipProvider>
   );
 }

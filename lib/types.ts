@@ -10,6 +10,7 @@ export interface Drawing {
   generationTimeMs: number;
   usage?: TokenUsage;
   cost?: number;
+  chunks?: string[];
 }
 
 export interface GameRound {

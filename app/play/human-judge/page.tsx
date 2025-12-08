@@ -27,6 +27,9 @@ import {
   type ModelConfig,
 } from "@/lib/models";
 import type { Drawing } from "@/lib/types";
+import { useSaveSession } from "@/lib/hooks/use-gallery";
+import { useUserIdentity } from "@/lib/hooks/use-user-identity";
+import { SignupPrompt } from "@/components/signup-prompt";
 import {
   ArrowLeft,
   Play,
@@ -68,6 +71,10 @@ interface GeneratingModel {
 type FilterType = "all" | "budget" | "mid" | "premium" | "flagship";
 
 export default function HumanJudgePage() {
+  const saveSession = useSaveSession();
+  const { isAuthenticated } = useUserIdentity();
+  const [showSignupPrompt, setShowSignupPrompt] = useState(false);
+  const [hasShownPrompt, setHasShownPrompt] = useState(false);
   const [gameState, setGameState] = useState<GameState>({
     status: "setup",
     prompt: "",
@@ -182,6 +189,7 @@ export default function HumanJudgePage() {
       const decoder = new TextDecoder();
       let buffer = "";
       const completedDrawings: Drawing[] = [];
+      const chunksMap = new Map<string, string[]>(); // Track chunks per model for replay
       let totalCost = 0;
       let totalTokens = 0;
       let totalTimeMs = 0;
@@ -207,6 +215,12 @@ export default function HumanJudgePage() {
                 prev.map((m) => ({ ...m, status: "pending" }))
               );
             } else if (event.type === "partial") {
+              // Collect chunks for replay
+              if (!chunksMap.has(event.modelId)) {
+                chunksMap.set(event.modelId, []);
+              }
+              chunksMap.get(event.modelId)!.push(event.svg);
+              
               // Update partial SVG as it streams in
               setGeneratingModels((prev) =>
                 prev.map((m) =>
@@ -230,6 +244,7 @@ export default function HumanJudgePage() {
                 generationTimeMs: event.generationTimeMs,
                 usage: event.usage,
                 cost: event.cost,
+                chunks: chunksMap.get(event.modelId) || [],
               });
             } else if (event.type === "error") {
               // Mark as error
@@ -297,17 +312,46 @@ export default function HumanJudgePage() {
   const confirmVote = useCallback(() => {
     if (!gameState.selectedDrawing) return;
 
-    setGameState((prev) => ({
-      ...prev,
-      status: "results",
-      leaderboard: {
-        ...prev.leaderboard,
-        [prev.selectedDrawing!]:
-          (prev.leaderboard[prev.selectedDrawing!] || 0) + 1,
-      },
-      roundsPlayed: prev.roundsPlayed + 1,
-    }));
-  }, [gameState.selectedDrawing]);
+    // Save to gallery (outside of state updater to avoid duplicate calls)
+    saveSession.mutate({
+      mode: "human_judge",
+      prompt: gameState.prompt,
+      totalCost: gameState.roundCost,
+      totalTokens: gameState.totalTokens,
+      totalTimeMs: gameState.totalTimeMs,
+      drawings: gameState.drawings.map((d) => ({
+        modelId: d.modelId,
+        svg: d.svg,
+        generationTimeMs: d.generationTimeMs,
+        cost: d.cost,
+        tokens: d.usage?.totalTokens,
+        isWinner: d.modelId === gameState.selectedDrawing,
+        chunks: d.chunks,
+      })),
+    });
+
+    setGameState((prev) => {
+      const newState = {
+        ...prev,
+        status: "results" as const,
+        leaderboard: {
+          ...prev.leaderboard,
+          [prev.selectedDrawing!]:
+            (prev.leaderboard[prev.selectedDrawing!] || 0) + 1,
+        },
+        roundsPlayed: prev.roundsPlayed + 1,
+      };
+      
+      if (!isAuthenticated && !hasShownPrompt) {
+        setTimeout(() => {
+          setShowSignupPrompt(true);
+          setHasShownPrompt(true);
+        }, 1000);
+      }
+      
+      return newState;
+    });
+  }, [gameState.selectedDrawing, gameState.prompt, gameState.drawings, gameState.roundCost, gameState.totalTokens, gameState.totalTimeMs, saveSession, isAuthenticated, hasShownPrompt]);
 
   const playAgain = useCallback(() => {
     startRound();
@@ -1017,6 +1061,7 @@ export default function HumanJudgePage() {
           )}
         </div>
       </main>
+      <SignupPrompt open={showSignupPrompt} onOpenChange={setShowSignupPrompt} />
     </TooltipProvider>
   );
 }

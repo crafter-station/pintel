@@ -23,3 +23,7 @@ yarn-error.log*
 # Misc
 .DS_Store
 *.pem
+
+# clerk configuration (can include secrets)
+/.clerk/
+.cursor/
