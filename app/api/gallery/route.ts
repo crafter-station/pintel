@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { gameSessions, drawings, guesses, modelScores } from "@/db/schema";
-import { eq, desc, and, count, sql, inArray } from "drizzle-orm";
+import { eq, desc, and, count, sql, inArray, or } from "drizzle-orm";
 import { z } from "zod";
+import { getCurrentIdentity } from "@/lib/identity";
 
 const SaveSessionSchema = z.object({
   mode: z.enum(["human_judge", "model_guess", "ai_duel"]),
@@ -39,13 +40,27 @@ export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams;
     const mode = searchParams.get("mode");
+    const mine = searchParams.get("mine") === "true";
     const page = parseInt(searchParams.get("page") || "1");
     const pageSize = parseInt(searchParams.get("pageSize") || "20");
     const offset = (page - 1) * pageSize;
 
-    const whereConditions = mode
-      ? [eq(gameSessions.mode, mode as any)]
-      : [];
+    const identity = await getCurrentIdentity(request);
+    const whereConditions = [];
+
+    if (mode) {
+      whereConditions.push(eq(gameSessions.mode, mode as any));
+    }
+
+    if (mine) {
+      if (identity.clerkUserId) {
+        whereConditions.push(eq(gameSessions.clerkUserId, identity.clerkUserId));
+      } else if (identity.anonId) {
+        whereConditions.push(eq(gameSessions.anonId, identity.anonId));
+      } else {
+        return NextResponse.json({ items: [], total: 0, page, pageSize });
+      }
+    }
 
     const [sessions, totalResult] = await Promise.all([
       db
@@ -136,6 +151,7 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const data = SaveSessionSchema.parse(body);
+    const identity = await getCurrentIdentity(request);
 
     const [session] = await db
       .insert(gameSessions)
@@ -145,6 +161,8 @@ export async function POST(request: NextRequest) {
         totalCost: data.totalCost,
         totalTokens: data.totalTokens,
         totalTimeMs: data.totalTimeMs,
+        anonId: identity.anonId || null,
+        clerkUserId: identity.clerkUserId || null,
       })
       .returning();
 
