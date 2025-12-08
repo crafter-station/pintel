@@ -88,8 +88,10 @@ export default function AIDuelPage() {
 
   const [phaseStatus, setPhaseStatus] = useState<"idle" | "drawing" | "guessing" | "scoring">("idle");
   const [elapsedTime, setElapsedTime] = useState(0);
+  const [guessingModels, setGuessingModels] = useState<Set<string>>(new Set()); // Track which models are thinking
   const startTimeRef = useRef<number | null>(null);
   const autoPlayRef = useRef<NodeJS.Timeout | null>(null);
+  const isRunningRef = useRef(false); // Prevent concurrent rounds
 
   const visionModels = useMemo(() => getVisionModels(), []);
 
@@ -181,29 +183,19 @@ export default function AIDuelPage() {
     }));
   }, []);
 
-  const startDuel = useCallback(() => {
-    if (state.selectedModels.length < 3) return;
-
-    // Initialize leaderboard
-    const initialLeaderboard: DuelState["leaderboard"] = {};
-    state.selectedModels.forEach((id) => {
-      initialLeaderboard[id] = { draws: 0, correctGuesses: 0, points: 0 };
-    });
-
-    setState((prev) => ({
-      ...prev,
-      status: "running",
-      currentRound: 1,
-      leaderboard: initialLeaderboard,
-      roundHistory: [],
-      totalCost: 0,
-      totalTokens: 0,
-      autoPlay: true,
-    }));
-
-    // Start first round
-    runRound(state.selectedModels[0], state.selectedModels, initialLeaderboard, 1);
-  }, [state.selectedModels, runRound]);
+  const checkGuess = (guess: string, prompt: string): boolean => {
+    const normalizedGuess = guess.toLowerCase().trim();
+    const normalizedPrompt = prompt.toLowerCase().trim();
+    if (normalizedGuess.includes(normalizedPrompt) || normalizedPrompt.includes(normalizedGuess)) {
+      return true;
+    }
+    const promptWords = normalizedPrompt.split(/\s+/);
+    const guessWords = normalizedGuess.split(/\s+/);
+    const significantWords = promptWords.filter((w) => w.length > 2);
+    return significantWords.some((word) =>
+      guessWords.some((gw) => gw.includes(word) || word.includes(gw))
+    );
+  };
 
   const runRound = useCallback(async (
     drawerId: string,
@@ -211,6 +203,19 @@ export default function AIDuelPage() {
     leaderboard: DuelState["leaderboard"],
     roundNum: number
   ) => {
+    // Prevent concurrent rounds
+    if (isRunningRef.current) {
+      console.log("[AI Duel] Round already running, skipping");
+      return;
+    }
+    isRunningRef.current = true;
+
+    // Clear any pending autoplay
+    if (autoPlayRef.current) {
+      clearTimeout(autoPlayRef.current);
+      autoPlayRef.current = null;
+    }
+
     const prompt = getRandomPrompt();
     const guessers = models.filter((id) => id !== drawerId);
 
@@ -282,6 +287,7 @@ export default function AIDuelPage() {
 
       // Phase 2: Guessing
       setPhaseStatus("guessing");
+      setGuessingModels(new Set(guessers)); // Mark all guessers as thinking
 
       // Convert SVG to PNG for vision models
       console.log("[AI Duel] Converting SVG to PNG...");
@@ -319,13 +325,9 @@ export default function AIDuelPage() {
             console.log("[AI Duel] Guess event:", event.type, event.modelId, event.guess?.substring(0, 50));
 
             if (event.type === "partial") {
-              setState((prev) => ({
-                ...prev,
-                guesses: {
-                  ...prev.guesses,
-                  [event.modelId]: { guess: event.guess, isCorrect: false, timeMs: 0 },
-                },
-              }));
+              // Ignore partial events to keep UI stable
+              // Just log for debugging
+              // console.log("[AI Duel] Partial:", event.modelId);
             } else if (event.type === "guess") {
               const isCorrect = checkGuess(event.guess, prompt);
               console.log("[AI Duel] Final guess:", event.modelId, "->", event.guess, "correct:", isCorrect);
@@ -334,6 +336,12 @@ export default function AIDuelPage() {
                 isCorrect,
                 timeMs: event.generationTimeMs,
               };
+              // Remove from guessing set and update state
+              setGuessingModels((prev) => {
+                const next = new Set(prev);
+                next.delete(event.modelId);
+                return next;
+              });
               setState((prev) => ({
                 ...prev,
                 guesses: {
@@ -342,6 +350,12 @@ export default function AIDuelPage() {
                 },
               }));
             } else if (event.type === "error") {
+              // Also remove from guessing on error
+              setGuessingModels((prev) => {
+                const next = new Set(prev);
+                next.delete(event.modelId);
+                return next;
+              });
               console.error("[AI Duel] Guess error:", event.modelId, event.error);
             } else if (event.type === "complete") {
               guessCost = event.totalCost || 0;
@@ -385,36 +399,63 @@ export default function AIDuelPage() {
         winner,
       };
 
+      const isLastRound = roundNum >= state.totalRounds;
+
       setState((prev) => ({
         ...prev,
         leaderboard: finalLeaderboard,
         totalCost: prev.totalCost + guessCost,
         totalTokens: prev.totalTokens + guessTokens,
         roundHistory: [...prev.roundHistory, roundResult],
-        status: roundNum >= prev.totalRounds ? "finished" : "round-end",
+        status: isLastRound ? "finished" : "round-end",
       }));
 
       setPhaseStatus("idle");
+      setGuessingModels(new Set()); // Clear guessing state
+      isRunningRef.current = false;
 
-      // Auto-advance to next round (check current autoPlay state)
-      setState((prev) => {
-        if (roundNum < prev.totalRounds && prev.autoPlay) {
-          const delay = prev.speed === "instant" ? 500 : prev.speed === "fast" ? 1500 : 3000;
-          autoPlayRef.current = setTimeout(() => {
-            const nextDrawerIndex = (models.indexOf(drawerId) + 1) % models.length;
-            const nextDrawer = models[nextDrawerIndex];
-            setState((s) => ({ ...s, currentRound: roundNum + 1, status: "running" }));
-            runRound(nextDrawer, models, finalLeaderboard, roundNum + 1);
-          }, delay);
-        }
-        return prev;
-      });
+      // Auto-advance to next round
+      if (!isLastRound && state.autoPlay) {
+        const delay = state.speed === "instant" ? 500 : state.speed === "fast" ? 1500 : 3000;
+        autoPlayRef.current = setTimeout(() => {
+          const nextDrawerIndex = (models.indexOf(drawerId) + 1) % models.length;
+          const nextDrawer = models[nextDrawerIndex];
+          setState((s) => ({ ...s, currentRound: roundNum + 1, status: "running" }));
+          runRound(nextDrawer, models, finalLeaderboard, roundNum + 1);
+        }, delay);
+      }
     } catch (error) {
       console.error("Round error:", error);
       setPhaseStatus("idle");
+      setGuessingModels(new Set()); // Clear guessing state on error
+      isRunningRef.current = false;
       setState((prev) => ({ ...prev, status: "paused" }));
     }
   }, [state.totalRounds, state.autoPlay, state.speed, svgToPng]);
+
+  const startDuel = useCallback(() => {
+    if (state.selectedModels.length < 3) return;
+
+    // Initialize leaderboard
+    const initialLeaderboard: DuelState["leaderboard"] = {};
+    state.selectedModels.forEach((id) => {
+      initialLeaderboard[id] = { draws: 0, correctGuesses: 0, points: 0 };
+    });
+
+    setState((prev) => ({
+      ...prev,
+      status: "running",
+      currentRound: 1,
+      leaderboard: initialLeaderboard,
+      roundHistory: [],
+      totalCost: 0,
+      totalTokens: 0,
+      autoPlay: true,
+    }));
+
+    // Start first round
+    runRound(state.selectedModels[0], state.selectedModels, initialLeaderboard, 1);
+  }, [state.selectedModels, runRound]);
 
   const continueToNextRound = useCallback(() => {
     const nextDrawerIndex = (state.selectedModels.indexOf(state.currentDrawer!) + 1) % state.selectedModels.length;
@@ -422,20 +463,6 @@ export default function AIDuelPage() {
     setState((prev) => ({ ...prev, currentRound: prev.currentRound + 1, status: "running" }));
     runRound(nextDrawer, state.selectedModels, state.leaderboard, state.currentRound + 1);
   }, [state.selectedModels, state.currentDrawer, state.leaderboard, state.currentRound, runRound]);
-
-  const checkGuess = (guess: string, prompt: string): boolean => {
-    const normalizedGuess = guess.toLowerCase().trim();
-    const normalizedPrompt = prompt.toLowerCase().trim();
-    if (normalizedGuess.includes(normalizedPrompt) || normalizedPrompt.includes(normalizedGuess)) {
-      return true;
-    }
-    const promptWords = normalizedPrompt.split(/\s+/);
-    const guessWords = normalizedGuess.split(/\s+/);
-    const significantWords = promptWords.filter((w) => w.length > 2);
-    return significantWords.some((word) =>
-      guessWords.some((gw) => gw.includes(word) || word.includes(gw))
-    );
-  };
 
   const sortedLeaderboard = useMemo(() => {
     return Object.entries(state.leaderboard)
@@ -656,6 +683,7 @@ export default function AIDuelPage() {
                     .map((modelId) => {
                       const model = getModelById(modelId);
                       const guess = state.guesses[modelId];
+                      const isThinking = guessingModels.has(modelId);
                       if (!model) return null;
 
                       return (
@@ -663,8 +691,7 @@ export default function AIDuelPage() {
                           key={modelId}
                           className={cn(
                             "transition-all",
-                            guess?.isCorrect && "ring-2 ring-green-500 bg-green-500/5",
-                            !guess && phaseStatus === "guessing" && "opacity-60"
+                            guess?.isCorrect && "ring-2 ring-green-500 bg-green-500/5"
                           )}
                         >
                           <CardContent className="p-4">
@@ -672,13 +699,13 @@ export default function AIDuelPage() {
                               <div
                                 className={cn(
                                   "size-3 rounded-full shrink-0",
-                                  !guess && phaseStatus === "guessing" && "animate-pulse"
+                                  isThinking && "animate-pulse"
                                 )}
                                 style={{ backgroundColor: model.color }}
                               />
                               <span className="font-medium">{model.name}</span>
                               <div className="flex-1" />
-                              {!guess && phaseStatus === "guessing" && (
+                              {isThinking && (
                                 <Badge variant="outline" className="text-xs">
                                   <Spinner className="size-3 mr-1" />
                                   thinking...
@@ -714,9 +741,13 @@ export default function AIDuelPage() {
                                 )}>
                                   &ldquo;{guess.guess}&rdquo;
                                 </span>
+                              ) : isThinking ? (
+                                <span className="text-muted-foreground text-sm italic">
+                                  Analyzing drawing...
+                                </span>
                               ) : (
                                 <span className="text-muted-foreground text-sm">
-                                  Waiting for guess...
+                                  Waiting...
                                 </span>
                               )}
                             </div>

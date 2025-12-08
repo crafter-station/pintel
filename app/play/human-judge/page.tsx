@@ -60,7 +60,7 @@ interface GeneratingModel {
   id: string;
   name: string;
   color: string;
-  status: "pending" | "streaming" | "done" | "error";
+  status: "pending" | "streaming" | "done" | "error" | "skipped";
   svg?: string;
   timeMs?: number;
 }
@@ -83,10 +83,37 @@ export default function HumanJudgePage() {
   });
 
   const [generatingModels, setGeneratingModels] = useState<GeneratingModel[]>([]);
+  const [displayOrder, setDisplayOrder] = useState<string[]>([]); // Shuffled order for voting/results
+  const [previousDisplayOrder, setPreviousDisplayOrder] = useState<string[]>([]); // Track previous round order
   const [providerFilter, setProviderFilter] = useState<string>("all");
   const [tierFilter, setTierFilter] = useState<FilterType>("all");
   const [elapsedTime, setElapsedTime] = useState(0);
   const startTimeRef = useRef<number | null>(null);
+
+  // Shuffle array ensuring it's different from both selection order and previous order
+  const shuffleForDisplay = useCallback((modelIds: string[], selectionOrder: string[], prevOrder: string[]): string[] => {
+    const arraysEqual = (a: string[], b: string[]) =>
+      a.length === b.length && a.every((v, i) => v === b[i]);
+
+    let shuffled = [...modelIds];
+    let attempts = 0;
+    const maxAttempts = 50;
+
+    do {
+      // Fisher-Yates shuffle
+      for (let i = shuffled.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+      }
+      attempts++;
+    } while (
+      attempts < maxAttempts &&
+      (arraysEqual(shuffled, selectionOrder) ||
+       (prevOrder.length > 0 && arraysEqual(shuffled, prevOrder)))
+    );
+
+    return shuffled;
+  }, []);
 
   // Timer for elapsed time during generation
   useEffect(() => {
@@ -103,6 +130,47 @@ export default function HumanJudgePage() {
       startTimeRef.current = null;
     }
   }, [gameState.status]);
+
+  // Check if we can proceed to voting (at least 1 done, and user triggered continue or all terminal)
+  const completedCount = generatingModels.filter(m => m.status === "done").length;
+  const terminalCount = generatingModels.filter(m =>
+    m.status === "done" || m.status === "error" || m.status === "skipped"
+  ).length;
+  const allTerminal = generatingModels.length > 0 && terminalCount === generatingModels.length;
+  const canContinue = completedCount >= 1;
+
+  // Function to proceed to voting early
+  const proceedToVoting = useCallback(() => {
+    if (!canContinue || gameState.status !== "generating") return;
+
+    // Build drawings from completed models
+    const completedDrawings = generatingModels
+      .filter(m => m.status === "done" && m.svg)
+      .map(m => ({
+        modelId: m.id,
+        svg: m.svg!,
+        generationTimeMs: m.timeMs || 0,
+        usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+        cost: 0,
+      }));
+
+    // Save display order for next round
+    setPreviousDisplayOrder(displayOrder);
+
+    setGameState((prev) => ({
+      ...prev,
+      status: "voting",
+      drawings: completedDrawings,
+      totalTimeMs: Date.now() - (startTimeRef.current || Date.now()),
+    }));
+  }, [canContinue, gameState.status, generatingModels, displayOrder]);
+
+  // Auto-proceed when all models are in terminal state
+  useEffect(() => {
+    if (gameState.status === "generating" && allTerminal && canContinue) {
+      proceedToVoting();
+    }
+  }, [gameState.status, allTerminal, canContinue, proceedToVoting]);
 
   const providers = useMemo(() => getUniqueProviders(), []);
 
@@ -151,6 +219,10 @@ export default function HumanJudgePage() {
       selectedDrawing: null,
       roundCost: 0,
     }));
+
+    // Create shuffled display order from the start
+    const shuffledOrder = shuffleForDisplay(gameState.selectedModels, gameState.selectedModels, previousDisplayOrder);
+    setDisplayOrder(shuffledOrder);
 
     // Initialize generating models state
     setGeneratingModels(
@@ -251,15 +323,13 @@ export default function HumanJudgePage() {
         }
       }
 
-      // Shuffle drawings to anonymize them
-      const shuffledDrawings = [...completedDrawings].sort(
-        () => Math.random() - 0.5
-      );
+      // Save display order for next round comparison
+      setPreviousDisplayOrder(displayOrder);
 
       setGameState((prev) => ({
         ...prev,
         status: "voting",
-        drawings: shuffledDrawings,
+        drawings: completedDrawings,
         totalTimeMs,
         roundCost: totalCost,
         totalCost: prev.totalCost + totalCost,
@@ -312,6 +382,16 @@ export default function HumanJudgePage() {
   const playAgain = useCallback(() => {
     startRound();
   }, [startRound]);
+
+  const skipModel = useCallback((modelId: string) => {
+    setGeneratingModels((prev) =>
+      prev.map((m) =>
+        m.id === modelId && (m.status === "pending" || m.status === "streaming")
+          ? { ...m, status: "skipped" }
+          : m
+      )
+    );
+  }, []);
 
   return (
     <TooltipProvider>
@@ -594,81 +674,130 @@ export default function HumanJudgePage() {
 
               <div className={cn(
                 "grid gap-4",
-                generatingModels.length <= 4
+                displayOrder.length <= 4
                   ? "grid-cols-2 md:grid-cols-4"
-                  : generatingModels.length <= 6
+                  : displayOrder.length <= 6
                   ? "grid-cols-2 md:grid-cols-3"
                   : "grid-cols-2 md:grid-cols-4"
               )}>
-                {generatingModels.map((model) => (
-                  <Card
-                    key={model.id}
-                    className={cn(
-                      "overflow-hidden transition-all duration-300",
-                      model.status === "streaming" && "ring-2 ring-blue-500/30",
-                      model.status === "done" && "ring-2 ring-green-500/30",
-                      model.status === "error" && "ring-2 ring-red-500/30 opacity-60"
-                    )}
-                  >
-                    <CardContent className="p-0">
-                      <div className="aspect-square bg-white relative flex items-center justify-center overflow-hidden">
-                        {model.status === "pending" && (
-                          <div className="text-center space-y-3 text-muted-foreground">
-                            <Spinner className="size-6 mx-auto opacity-50" />
-                            <span className="text-xs">Connecting...</span>
-                          </div>
-                        )}
-                        {(model.status === "streaming" || model.status === "done") && model.svg && (
-                          <div
-                            className="w-full h-full"
-                            dangerouslySetInnerHTML={{ __html: model.svg }}
-                          />
-                        )}
-                        {model.status === "error" && (
-                          <div className="text-center space-y-2 text-red-500">
-                            <X className="size-8 mx-auto" />
-                            <span className="text-xs">Failed</span>
-                          </div>
-                        )}
-                        {(model.status === "streaming" || model.status === "done") && (
-                          <div className="absolute top-2 inset-x-2 flex items-center justify-between">
-                            <Badge
-                              variant="secondary"
-                              className={cn(
-                                "text-xs",
-                                model.status === "streaming" && "animate-pulse"
-                              )}
+                {displayOrder.map((modelId) => {
+                  const model = generatingModels.find((m) => m.id === modelId);
+                  if (!model) return null;
+
+                  return (
+                    <Card
+                      key={modelId}
+                      className={cn(
+                        "overflow-hidden transition-all duration-300",
+                        model.status === "streaming" && "ring-2 ring-blue-500/30",
+                        model.status === "done" && "ring-2 ring-green-500/30",
+                        model.status === "error" && "ring-2 ring-red-500/30 opacity-60",
+                        model.status === "skipped" && "ring-2 ring-orange-500/30 opacity-60"
+                      )}
+                    >
+                      <CardContent className="p-0">
+                        <div className="aspect-square bg-white relative flex items-center justify-center overflow-hidden">
+                          {model.status === "pending" && (
+                            <div className="text-center space-y-3 text-muted-foreground">
+                              <Spinner className="size-6 mx-auto opacity-50" />
+                              <span className="text-xs">Connecting...</span>
+                            </div>
+                          )}
+                          {(model.status === "streaming" || model.status === "done") && model.svg && (
+                            <div
+                              className="w-full h-full"
+                              dangerouslySetInnerHTML={{ __html: model.svg }}
+                            />
+                          )}
+                          {model.status === "error" && (
+                            <div className="text-center space-y-2 text-red-500">
+                              <X className="size-8 mx-auto" />
+                              <span className="text-xs">Failed</span>
+                            </div>
+                          )}
+                          {model.status === "skipped" && (
+                            <div className="text-center space-y-2 text-orange-500">
+                              <Clock className="size-8 mx-auto" />
+                              <span className="text-xs">Skipped</span>
+                            </div>
+                          )}
+                          {(model.status === "streaming" || model.status === "done") && (
+                            <div className="absolute top-2 inset-x-2 flex items-center justify-between">
+                              <Badge
+                                variant="secondary"
+                                className={cn(
+                                  "text-xs",
+                                  model.status === "streaming" && "animate-pulse"
+                                )}
+                              >
+                                {model.status === "streaming" && <Spinner className="size-3 mr-1" />}
+                                {model.svg ? `${(model.svg.length / 1000).toFixed(1)}kb` : "0kb"}
+                              </Badge>
+                              <Badge variant="outline" className="text-xs bg-background/80 backdrop-blur-sm tabular-nums">
+                                {model.status === "done" && model.timeMs
+                                  ? `${(model.timeMs / 1000).toFixed(1)}s`
+                                  : `${elapsedTime}s`
+                                }
+                              </Badge>
+                            </div>
+                          )}
+                          {/* Skip button for pending/streaming models */}
+                          {(model.status === "pending" || model.status === "streaming") && (
+                            <button
+                              onClick={() => skipModel(modelId)}
+                              className="absolute bottom-2 right-2 p-1.5 rounded-full bg-background/80 backdrop-blur-sm hover:bg-background text-muted-foreground hover:text-foreground transition-all opacity-0 hover:opacity-100 group-hover:opacity-100"
+                              style={{ opacity: 0.7 }}
+                              title="Skip this model"
                             >
-                              {model.status === "streaming" && <Spinner className="size-3 mr-1" />}
-                              {model.svg ? `${(model.svg.length / 1000).toFixed(1)}kb` : "0kb"}
-                            </Badge>
-                            <Badge variant="outline" className="text-xs bg-background/80 backdrop-blur-sm tabular-nums">
-                              {model.status === "done" && model.timeMs
-                                ? `${(model.timeMs / 1000).toFixed(1)}s`
-                                : `${elapsedTime}s`
-                              }
-                            </Badge>
-                          </div>
-                        )}
-                      </div>
-                      <div className="p-3 border-t bg-card">
-                        <div className="flex items-center gap-2">
-                          <div
-                            className={cn(
-                              "size-2.5 rounded-full transition-all",
-                              model.status === "streaming" && "animate-pulse"
-                            )}
-                            style={{ backgroundColor: model.color }}
-                          />
-                          <span className="text-sm font-medium truncate text-muted-foreground">
-                            ???
-                          </span>
+                              <X className="size-4" />
+                            </button>
+                          )}
                         </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
+                        <div className="p-3 border-t bg-card">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <div
+                                className={cn(
+                                  "size-2.5 rounded-full transition-all",
+                                  model.status === "streaming" && "animate-pulse"
+                                )}
+                                style={{ backgroundColor: model.color }}
+                              />
+                              <span className="text-sm font-medium truncate text-muted-foreground">
+                                ???
+                              </span>
+                            </div>
+                            {(model.status === "pending" || model.status === "streaming") && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => skipModel(modelId)}
+                                className="h-6 px-2 text-xs text-muted-foreground hover:text-foreground"
+                              >
+                                Skip
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
               </div>
+
+              {/* Continue button - appears when at least 1 model is done */}
+              {canContinue && !allTerminal && (
+                <div className="flex justify-center pt-6">
+                  <Button
+                    size="lg"
+                    onClick={proceedToVoting}
+                    className="px-8"
+                  >
+                    <Check className="size-4" />
+                    Continue with {completedCount} drawing{completedCount !== 1 ? 's' : ''}
+                  </Button>
+                </div>
+              )}
             </div>
           )}
 
@@ -696,28 +825,36 @@ export default function HumanJudgePage() {
 
               <div className={cn(
                 "grid gap-6",
-                generatingModels.length <= 4
+                displayOrder.length <= 4
                   ? "grid-cols-2 md:grid-cols-4"
-                  : generatingModels.length <= 6
+                  : displayOrder.length <= 6
                   ? "grid-cols-2 md:grid-cols-3"
                   : "grid-cols-2 md:grid-cols-4"
               )}>
-                {generatingModels.map((model, index) => {
-                  const drawing = gameState.drawings.find((d) => d.modelId === model.id);
-                  const isError = model.status === "error";
-                  const isSelected = gameState.selectedDrawing === model.id;
+                {displayOrder.map((modelId, index) => {
+                  const drawing = gameState.drawings.find((d) => d.modelId === modelId);
+                  const genModel = generatingModels.find((m) => m.id === modelId);
+                  const isError = genModel?.status === "error";
+                  const isSkipped = genModel?.status === "skipped";
+                  const isSelected = gameState.selectedDrawing === modelId;
 
-                  if (isError) {
+                  if (isError || isSkipped) {
                     return (
                       <Card
-                        key={model.id}
-                        className="overflow-hidden opacity-50 ring-2 ring-red-500/30"
+                        key={modelId}
+                        className={cn(
+                          "overflow-hidden opacity-50",
+                          isError ? "ring-2 ring-red-500/30" : "ring-2 ring-orange-500/30"
+                        )}
                       >
                         <CardContent className="p-0">
                           <div className="aspect-square bg-muted flex items-center justify-center">
-                            <div className="text-center space-y-2 text-red-500">
-                              <X className="size-8 mx-auto" />
-                              <span className="text-xs">Failed</span>
+                            <div className={cn(
+                              "text-center space-y-2",
+                              isError ? "text-red-500" : "text-orange-500"
+                            )}>
+                              {isError ? <X className="size-8 mx-auto" /> : <Clock className="size-8 mx-auto" />}
+                              <span className="text-xs">{isError ? "Failed" : "Skipped"}</span>
                             </div>
                           </div>
                           <div className="p-4 border-t bg-card">
@@ -725,8 +862,11 @@ export default function HumanJudgePage() {
                               <span className="text-sm font-medium text-muted-foreground">
                                 {String.fromCharCode(65 + index)}
                               </span>
-                              <Badge variant="outline" className="text-xs text-red-500">
-                                Error
+                              <Badge variant="outline" className={cn(
+                                "text-xs",
+                                isError ? "text-red-500" : "text-orange-500"
+                              )}>
+                                {isError ? "Error" : "Skipped"}
                               </Badge>
                             </div>
                           </div>
@@ -739,14 +879,14 @@ export default function HumanJudgePage() {
 
                   return (
                     <Card
-                      key={model.id}
+                      key={modelId}
                       className={cn(
                         "group overflow-hidden cursor-pointer transition-all duration-300 hover:scale-[1.02] hover:shadow-lg",
                         isSelected
                           ? "ring-2 ring-primary shadow-lg shadow-primary/20 scale-[1.02]"
                           : "hover:ring-2 hover:ring-primary/30"
                       )}
-                      onClick={() => selectDrawing(model.id)}
+                      onClick={() => selectDrawing(modelId)}
                     >
                       <CardContent className="p-0">
                         <div className="aspect-square bg-white relative overflow-hidden">
@@ -820,29 +960,37 @@ export default function HumanJudgePage() {
 
               <div className={cn(
                 "grid gap-6",
-                generatingModels.length <= 4
+                displayOrder.length <= 4
                   ? "grid-cols-2 md:grid-cols-4"
-                  : generatingModels.length <= 6
+                  : displayOrder.length <= 6
                   ? "grid-cols-2 md:grid-cols-3"
                   : "grid-cols-2 md:grid-cols-4"
               )}>
-                {generatingModels.map((genModel) => {
-                  const drawing = gameState.drawings.find((d) => d.modelId === genModel.id);
-                  const model = getModelById(genModel.id);
-                  const isError = genModel.status === "error";
-                  const isWinner = gameState.selectedDrawing === genModel.id;
+                {displayOrder.map((modelId) => {
+                  const drawing = gameState.drawings.find((d) => d.modelId === modelId);
+                  const model = getModelById(modelId);
+                  const genModel = generatingModels.find((m) => m.id === modelId);
+                  const isError = genModel?.status === "error";
+                  const isSkipped = genModel?.status === "skipped";
+                  const isWinner = gameState.selectedDrawing === modelId;
 
-                  if (isError) {
+                  if (isError || isSkipped) {
                     return (
                       <Card
-                        key={genModel.id}
-                        className="overflow-hidden opacity-50 ring-2 ring-red-500/30"
+                        key={modelId}
+                        className={cn(
+                          "overflow-hidden opacity-50",
+                          isError ? "ring-2 ring-red-500/30" : "ring-2 ring-orange-500/30"
+                        )}
                       >
                         <CardContent className="p-0">
                           <div className="aspect-square bg-muted flex items-center justify-center">
-                            <div className="text-center space-y-2 text-red-500">
-                              <X className="size-8 mx-auto" />
-                              <span className="text-xs">Failed</span>
+                            <div className={cn(
+                              "text-center space-y-2",
+                              isError ? "text-red-500" : "text-orange-500"
+                            )}>
+                              {isError ? <X className="size-8 mx-auto" /> : <Clock className="size-8 mx-auto" />}
+                              <span className="text-xs">{isError ? "Failed" : "Skipped"}</span>
                             </div>
                           </div>
                           <div className="p-4 border-t space-y-2">
@@ -855,8 +1003,11 @@ export default function HumanJudgePage() {
                                 {model?.name}
                               </span>
                             </div>
-                            <div className="text-xs text-red-500">
-                              Generation failed
+                            <div className={cn(
+                              "text-xs",
+                              isError ? "text-red-500" : "text-orange-500"
+                            )}>
+                              {isError ? "Generation failed" : "Skipped by user"}
                             </div>
                           </div>
                         </CardContent>
@@ -868,7 +1019,7 @@ export default function HumanJudgePage() {
 
                   return (
                     <Card
-                      key={genModel.id}
+                      key={modelId}
                       className={cn(
                         "overflow-hidden transition-all duration-500",
                         isWinner

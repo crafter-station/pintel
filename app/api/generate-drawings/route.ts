@@ -1,4 +1,4 @@
-import { streamObject } from "ai";
+import { streamObject, generateObject, generateText } from "ai";
 import { z } from "zod";
 import { AVAILABLE_MODELS, calculateCost, getModelById } from "@/lib/models";
 
@@ -67,6 +67,58 @@ export async function POST(request: Request) {
           console.log(`[${model.id}] Starting generation...`);
 
           try {
+            let finalSvg: string = "";
+            let inputTokens: number = 0;
+            let outputTokens: number = 0;
+
+            // Helper for non-streaming fallback (uses tool calling)
+            const generateWithoutStreaming = async () => {
+              console.log(`[${model.id}] Using non-streaming fallback`);
+              const result = await generateObject({
+                model: model.id,
+                schema: SVG_SCHEMA,
+                system: SYSTEM_PROMPT,
+                prompt: `Draw a simple doodle of: ${prompt}`,
+                temperature: 0.7,
+              });
+              console.log(`[${model.id}] Non-streaming generation complete`);
+              return {
+                svg: result.object.svg,
+                inputTokens: result.usage?.inputTokens ?? 0,
+                outputTokens: result.usage?.outputTokens ?? 0,
+              };
+            };
+
+            // Helper for text-only fallback (for models without tool support)
+            const generateWithTextOnly = async () => {
+              console.log(`[${model.id}] Using text-only fallback (no tool support)`);
+              const result = await generateText({
+                model: model.id,
+                system: `You are a creative artist that draws simple SVG graphics.
+Output ONLY a valid SVG element, nothing else. No explanation, no markdown, just the SVG.
+The SVG must have viewBox="0 0 400 400" and use simple shapes.`,
+                prompt: `Create a simple SVG doodle of: ${prompt}
+
+Output only the SVG code starting with <svg and ending with </svg>. No other text.`,
+                temperature: 0.7,
+              });
+
+              // Extract SVG from response
+              const text = result.text;
+              const svgMatch = text.match(/<svg[\s\S]*?<\/svg>/i);
+              if (!svgMatch) {
+                throw new Error("No valid SVG found in response");
+              }
+
+              console.log(`[${model.id}] Text-only generation complete`);
+              return {
+                svg: svgMatch[0],
+                inputTokens: result.usage?.inputTokens ?? 0,
+                outputTokens: result.usage?.outputTokens ?? 0,
+              };
+            };
+
+            // Try streaming first
             const result = streamObject({
               model: model.id,
               schema: SVG_SCHEMA,
@@ -77,31 +129,73 @@ export async function POST(request: Request) {
 
             let lastSvg = "";
             let chunkCount = 0;
+            let streamingFailed = false;
 
-            // Stream partial SVG updates
-            for await (const partial of result.partialObjectStream) {
-              chunkCount++;
-              if (partial.svg && partial.svg !== lastSvg && partial.svg.length > lastSvg.length) {
-                lastSvg = partial.svg;
-                console.log(`[${model.id}] Chunk ${chunkCount}: ${partial.svg.length} chars`);
-                controller.enqueue(
-                  encoder.encode(`data: ${JSON.stringify({
-                    type: "partial",
-                    modelId: model.id,
-                    svg: partial.svg,
-                  })}\n\n`)
-                );
+            // Stream partial SVG updates - catch errors during iteration
+            try {
+              for await (const partial of result.partialObjectStream) {
+                chunkCount++;
+                if (partial.svg && partial.svg !== lastSvg && partial.svg.length > lastSvg.length) {
+                  lastSvg = partial.svg;
+                  console.log(`[${model.id}] Chunk ${chunkCount}: ${partial.svg.length} chars`);
+                  controller.enqueue(
+                    encoder.encode(`data: ${JSON.stringify({
+                      type: "partial",
+                      modelId: model.id,
+                      svg: partial.svg,
+                    })}\n\n`)
+                  );
+                }
+              }
+            } catch (iterError) {
+              console.log(`[${model.id}] Stream iteration error, will try fallback`);
+              streamingFailed = true;
+            }
+
+            // Check if streaming produced valid output
+            if (!streamingFailed && chunkCount > 0) {
+              console.log(`[${model.id}] Stream complete, ${chunkCount} chunks total`);
+              // Try to get final result
+              try {
+                const finalObject = await result.object;
+                const usage = await result.usage;
+                finalSvg = finalObject.svg;
+                inputTokens = usage?.inputTokens ?? 0;
+                outputTokens = usage?.outputTokens ?? 0;
+              } catch (objectError) {
+                console.log(`[${model.id}] Failed to get final object, trying fallback`);
+                streamingFailed = true;
+              }
+            } else if (!streamingFailed) {
+              // Stream completed but with 0 chunks - likely model doesn't support streaming
+              console.log(`[${model.id}] Stream completed with 0 chunks, trying fallback`);
+              streamingFailed = true;
+            }
+
+            // Fallback chain if streaming didn't work
+            if (streamingFailed) {
+              try {
+                // Try non-streaming with tool use first
+                const fallbackResult = await generateWithoutStreaming();
+                finalSvg = fallbackResult.svg;
+                inputTokens = fallbackResult.inputTokens;
+                outputTokens = fallbackResult.outputTokens;
+              } catch (toolError) {
+                // If tool use fails completely, try text-only generation
+                const errorMsg = toolError instanceof Error ? toolError.message : String(toolError);
+                if (errorMsg.includes("tool") || errorMsg.includes("Tool")) {
+                  console.log(`[${model.id}] Tool use not supported, trying text-only`);
+                  const textResult = await generateWithTextOnly();
+                  finalSvg = textResult.svg;
+                  inputTokens = textResult.inputTokens;
+                  outputTokens = textResult.outputTokens;
+                } else {
+                  throw toolError;
+                }
               }
             }
-            console.log(`[${model.id}] Stream complete, ${chunkCount} chunks total`);
 
             const generationTimeMs = Date.now() - modelStartTime;
-
-            // Get final result and usage
-            const finalObject = await result.object;
-            const usage = await result.usage;
-            const inputTokens = usage?.inputTokens ?? 0;
-            const outputTokens = usage?.outputTokens ?? 0;
             const cost = calculateCost(model.id, inputTokens, outputTokens);
 
             completedCount++;
@@ -109,7 +203,7 @@ export async function POST(request: Request) {
             const drawingResult = {
               type: "drawing",
               modelId: model.id,
-              svg: finalObject.svg,
+              svg: finalSvg,
               generationTimeMs,
               usage: {
                 promptTokens: inputTokens,

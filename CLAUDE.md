@@ -28,15 +28,23 @@ bun lint         # Run ESLint
 
 ```
 app/
-├── api/generate-drawings/    # AI drawing generation endpoint
-├── play/human-judge/         # Human Judge game mode
+├── api/
+│   ├── generate-drawings/    # AI drawing generation endpoint
+│   └── guess-drawing/        # AI guessing endpoint
+├── play/
+│   ├── human-judge/          # Human judges AI drawings
+│   ├── model-guess/          # AI guesses human drawings
+│   └── ai-duel/              # AI vs AI battles
 ├── sign-in/[[...sign-in]]/   # Clerk sign-in page
 ├── sign-up/[[...sign-up]]/   # Clerk sign-up page
 lib/
 ├── models.ts                 # AI model configurations (GPT-4o, Claude, Gemini, Grok)
 ├── prompts.ts                # Drawing prompt pool
-├── types.ts                  # TypeScript interfaces (Drawing, GameRound, GameState)
-components/ui/                # shadcn/ui components
+├── types.ts                  # TypeScript interfaces
+components/
+├── ui/                       # shadcn/ui components
+├── drawing-canvas.tsx        # Canvas for human drawing input
+├── animated-svg.tsx          # SVG animation component
 ```
 
 ### AI Integration Pattern
@@ -61,14 +69,25 @@ Clerk middleware in `middleware.ts` protects routes:
 - **Public**: `/`, `/sign-in(.*)`, `/sign-up(.*)`
 - **Protected**: `/play/*` (requires authentication)
 
-### Game Flow (Human Judge Mode)
+### Game Modes
 
+**Human Judge** — Human picks the best AI-generated drawing
 1. Random prompt selected from `lib/prompts.ts`
-2. API calls all configured models in parallel via `generateObject`
-3. Models return SVG drawings (structured output with Zod schema)
-4. Drawings shuffled and displayed anonymously
-5. User votes for best drawing
-6. Results reveal model identities with leaderboard
+2. Multiple AI models generate SVG drawings in parallel
+3. Drawings shuffled and displayed anonymously
+4. User votes for best drawing
+5. Results reveal model identities
+
+**Model Guess** — AI tries to guess what the human drew
+1. User draws on canvas based on a prompt
+2. AI models analyze the drawing
+3. Models submit guesses
+4. Compare accuracy across models
+
+**AI Duel** — AI models compete head-to-head
+1. Two AI models draw the same prompt
+2. Another AI model judges the winner
+3. Track model performance over rounds
 
 ## Environment Variables
 

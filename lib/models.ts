@@ -262,3 +262,21 @@ export const DEFAULT_VISION_MODELS = [
 export function getVisionModels(): ModelConfig[] {
   return VISION_MODELS.map(id => getModelById(id)).filter(Boolean) as ModelConfig[];
 }
+
+// Models that don't support structured output (tool use) at all
+// These models cannot be used for drawing generation
+export const NO_STRUCTURED_OUTPUT_MODELS = [
+  "meta/llama-3.2-1b",
+  "meta/llama-3.2-3b",
+  "meta/llama-3.2-11b",
+  "meta/llama-3.1-8b",
+];
+
+export function supportsStructuredOutput(modelId: string): boolean {
+  return !NO_STRUCTURED_OUTPUT_MODELS.includes(modelId);
+}
+
+// Get models that can be used for drawing generation
+export function getDrawingCapableModels(): ModelConfig[] {
+  return AVAILABLE_MODELS.filter(m => supportsStructuredOutput(m.id));
+}
