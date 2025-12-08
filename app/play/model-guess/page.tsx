@@ -24,6 +24,7 @@ import {
   type ModelConfig,
 } from "@/lib/models";
 import { DrawingCanvas } from "@/components/drawing-canvas";
+import { useSaveSession } from "@/lib/hooks/use-gallery";
 import {
   ArrowLeft,
   Play,
@@ -58,6 +59,7 @@ interface Guess {
   isCorrect: boolean;
   generationTimeMs: number;
   cost?: number;
+  tokens?: number;
 }
 
 interface GuessingModel {
@@ -71,6 +73,7 @@ interface GuessingModel {
 }
 
 export default function ModelGuessPage() {
+  const saveSession = useSaveSession();
   const [gameState, setGameState] = useState<GameState>({
     status: "setup",
     prompt: "",
@@ -228,6 +231,7 @@ export default function ModelGuessPage() {
                 isCorrect,
                 generationTimeMs: event.generationTimeMs,
                 cost: event.cost,
+                tokens: event.usage?.totalTokens,
               });
             } else if (event.type === "error") {
               setGuessingModels((prev) =>
@@ -254,6 +258,23 @@ export default function ModelGuessPage() {
         newLeaderboard[firstCorrect.modelId] =
           (newLeaderboard[firstCorrect.modelId] || 0) + 1;
       }
+
+      // Auto-save to gallery (outside of state updater to avoid duplicate calls)
+      saveSession.mutate({
+        mode: "model_guess",
+        prompt: gameState.prompt,
+        totalCost: totalCost,
+        totalTokens: totalTokens,
+        drawings: [],
+        guesses: completedGuesses.map((g) => ({
+          modelId: g.modelId,
+          guess: g.guess,
+          isCorrect: g.isCorrect,
+          generationTimeMs: g.generationTimeMs,
+          cost: g.cost,
+          tokens: g.tokens,
+        })),
+      });
 
       setGameState((prev) => ({
         ...prev,
