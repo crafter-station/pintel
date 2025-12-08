@@ -105,6 +105,16 @@ export default function Home() {
           })}
         </div>
 
+        {/* Navigation Links */}
+        <div className="flex items-center justify-center gap-4">
+          <Button variant="outline" size="sm" asChild>
+            <Link href="/gallery">Gallery</Link>
+          </Button>
+          <Button variant="outline" size="sm" asChild>
+            <Link href="/leaderboard">Leaderboard</Link>
+          </Button>
+        </div>
+
         {/* Footer */}
         <footer className="text-center space-y-4">
           <p className="text-xs text-muted-foreground">
