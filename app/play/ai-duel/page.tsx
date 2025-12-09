@@ -24,6 +24,8 @@ import {
   type ModelConfig,
 } from "@/lib/models";
 import { useSaveSession } from "@/lib/hooks/use-gallery";
+import { useUserIdentity } from "@/lib/hooks/use-user-identity";
+import { SignupPrompt } from "@/components/signup-prompt";
 import {
   ArrowLeft,
   Play,
@@ -71,6 +73,8 @@ interface RoundResult {
 
 export default function AIDuelPage() {
   const saveSession = useSaveSession();
+  const { isAuthenticated } = useUserIdentity();
+  const [showSignupPrompt, setShowSignupPrompt] = useState(false);
   const [state, setState] = useState<DuelState>({
     status: "setup",
     selectedModels: DEFAULT_VISION_MODELS,
@@ -434,6 +438,10 @@ export default function AIDuelPage() {
           tokens: g.tokens,
         })),
       });
+
+      if (isLastRound && !isAuthenticated) {
+        setTimeout(() => setShowSignupPrompt(true), 1000);
+      }
 
       setState((prev) => ({
         ...prev,
@@ -953,6 +961,7 @@ export default function AIDuelPage() {
           )}
         </div>
       </main>
+      <SignupPrompt open={showSignupPrompt} onOpenChange={setShowSignupPrompt} />
     </TooltipProvider>
   );
 }

@@ -1,4 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useUserIdentity } from "./use-user-identity";
 
 export type GameMode = "human_judge" | "model_guess" | "ai_duel";
 
@@ -80,6 +81,7 @@ export function useGallery(mode?: GameMode, page = 1, pageSize = 20) {
 
 export function useSaveSession() {
   const queryClient = useQueryClient();
+  const { anonId } = useUserIdentity();
 
   return useMutation({
     mutationFn: async (data: SaveSessionData) => {
@@ -92,7 +94,6 @@ export function useSaveSession() {
       return res.json();
     },
     onSuccess: () => {
-      // Invalidate queries so gallery shows fresh data on next visit
       queryClient.invalidateQueries({ queryKey: ["gallery"] });
       queryClient.invalidateQueries({ queryKey: ["leaderboard"] });
     },

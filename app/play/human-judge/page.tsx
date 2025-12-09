@@ -28,6 +28,8 @@ import {
 } from "@/lib/models";
 import type { Drawing } from "@/lib/types";
 import { useSaveSession } from "@/lib/hooks/use-gallery";
+import { useUserIdentity } from "@/lib/hooks/use-user-identity";
+import { SignupPrompt } from "@/components/signup-prompt";
 import {
   ArrowLeft,
   Play,
@@ -70,6 +72,9 @@ type FilterType = "all" | "budget" | "mid" | "premium" | "flagship";
 
 export default function HumanJudgePage() {
   const saveSession = useSaveSession();
+  const { isAuthenticated } = useUserIdentity();
+  const [showSignupPrompt, setShowSignupPrompt] = useState(false);
+  const [hasShownPrompt, setHasShownPrompt] = useState(false);
   const [gameState, setGameState] = useState<GameState>({
     status: "setup",
     prompt: "",
@@ -395,17 +400,28 @@ export default function HumanJudgePage() {
       })),
     });
 
-    setGameState((prev) => ({
-      ...prev,
-      status: "results",
-      leaderboard: {
-        ...prev.leaderboard,
-        [prev.selectedDrawing!]:
-          (prev.leaderboard[prev.selectedDrawing!] || 0) + 1,
-      },
-      roundsPlayed: prev.roundsPlayed + 1,
-    }));
-  }, [gameState.selectedDrawing, gameState.prompt, gameState.drawings, gameState.roundCost, gameState.totalTokens, gameState.totalTimeMs, saveSession]);
+    setGameState((prev) => {
+      const newState = {
+        ...prev,
+        status: "results" as const,
+        leaderboard: {
+          ...prev.leaderboard,
+          [prev.selectedDrawing!]:
+            (prev.leaderboard[prev.selectedDrawing!] || 0) + 1,
+        },
+        roundsPlayed: prev.roundsPlayed + 1,
+      };
+      
+      if (!isAuthenticated && !hasShownPrompt) {
+        setTimeout(() => {
+          setShowSignupPrompt(true);
+          setHasShownPrompt(true);
+        }, 1000);
+      }
+      
+      return newState;
+    });
+  }, [gameState.selectedDrawing, gameState.prompt, gameState.drawings, gameState.roundCost, gameState.totalTokens, gameState.totalTimeMs, saveSession, isAuthenticated, hasShownPrompt]);
 
   const playAgain = useCallback(() => {
     startRound();
@@ -1196,6 +1212,7 @@ export default function HumanJudgePage() {
           )}
         </div>
       </main>
+      <SignupPrompt open={showSignupPrompt} onOpenChange={setShowSignupPrompt} />
     </TooltipProvider>
   );
 }

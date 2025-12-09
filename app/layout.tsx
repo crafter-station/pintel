@@ -10,6 +10,7 @@ import {
 import { dark } from "@clerk/themes";
 import { Button } from "@/components/ui/button";
 import { QueryProvider } from "@/components/providers/query-provider";
+import { SessionMergeProvider } from "@/components/providers/session-merge-provider";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -18,6 +19,49 @@ export const metadata: Metadata = {
     "A multimodal AI evaluation game where humans and models draw, guess, and evaluate each other.",
 };
 
+function AuthHeader() {
+  return (
+    <header className="fixed top-0 right-0 p-4 z-50">
+      <SignedOut>
+        <div className="flex items-center gap-2">
+          <SignInButton mode="modal">
+            <Button variant="ghost" size="sm">
+              Sign in
+            </Button>
+          </SignInButton>
+          <SignUpButton mode="modal">
+            <Button size="sm">Sign up</Button>
+          </SignUpButton>
+        </div>
+      </SignedOut>
+      <SignedIn>
+        <UserButton
+          appearance={{
+            elements: {
+              avatarBox: "size-9",
+            },
+          }}
+        />
+      </SignedIn>
+    </header>
+  );
+}
+
+function AppContent({ children }: { children: React.ReactNode }) {
+  return (
+    <>
+      <AuthHeader />
+      <SessionMergeProvider>
+        {children}
+      </SessionMergeProvider>
+    </>
+  );
+}
+
+function AppWithoutAuth({ children }: { children: React.ReactNode }) {
+  return <>{children}</>;
+}
+
 export default function RootLayout({
   children,
 }: {
@@ -25,53 +69,24 @@ export default function RootLayout({
 }) {
   const clerkPublishableKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
   
-  const content = (
+  return (
     <html lang="en" className="dark">
       <body className="min-h-screen bg-background font-sans antialiased">
         <QueryProvider>
-          {clerkPublishableKey && (
-            <header className="fixed top-0 right-0 p-4 z-50">
-              <SignedOut>
-                <div className="flex items-center gap-2">
-                  <SignInButton mode="modal">
-                    <Button variant="ghost" size="sm">
-                      Sign in
-                    </Button>
-                  </SignInButton>
-                  <SignUpButton mode="modal">
-                    <Button size="sm">Sign up</Button>
-                  </SignUpButton>
-                </div>
-              </SignedOut>
-              <SignedIn>
-                <UserButton
-                  appearance={{
-                    elements: {
-                      avatarBox: "size-9",
-                    },
-                  }}
-                />
-              </SignedIn>
-            </header>
+          {clerkPublishableKey ? (
+            <ClerkProvider
+              publishableKey={clerkPublishableKey}
+              appearance={{
+                baseTheme: dark,
+              }}
+            >
+              <AppContent>{children}</AppContent>
+            </ClerkProvider>
+          ) : (
+            <AppWithoutAuth>{children}</AppWithoutAuth>
           )}
-          {children}
         </QueryProvider>
       </body>
     </html>
-  );
-
-  if (!clerkPublishableKey) {
-    return content;
-  }
-
-  return (
-    <ClerkProvider
-      publishableKey={clerkPublishableKey}
-      appearance={{
-        baseTheme: dark,
-      }}
-    >
-      {content}
-    </ClerkProvider>
   );
 }
