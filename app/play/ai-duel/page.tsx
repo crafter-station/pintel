@@ -23,6 +23,7 @@ import {
   shuffleModels,
   type ModelConfig,
 } from "@/lib/models";
+import { useSaveSession } from "@/lib/hooks/use-gallery";
 import {
   ArrowLeft,
   Play,
@@ -69,6 +70,7 @@ interface RoundResult {
 }
 
 export default function AIDuelPage() {
+  const saveSession = useSaveSession();
   const [state, setState] = useState<DuelState>({
     status: "setup",
     selectedModels: DEFAULT_VISION_MODELS,
@@ -247,6 +249,7 @@ export default function AIDuelPage() {
       let finalSvg = "";
       let drawCost = 0;
       let drawTokens = 0;
+      const drawChunks: string[] = []; // Track chunks for replay
 
       while (true) {
         const { done, value } = await reader.read();
@@ -261,6 +264,7 @@ export default function AIDuelPage() {
           try {
             const event = JSON.parse(line.slice(6));
             if (event.type === "partial" && event.svg) {
+              drawChunks.push(event.svg); // Collect chunks for replay
               setState((prev) => ({ ...prev, currentSvg: event.svg }));
             } else if (event.type === "drawing") {
               finalSvg = event.svg;
@@ -306,7 +310,7 @@ export default function AIDuelPage() {
       if (!guessReader) throw new Error("No response body");
 
       let guessBuffer = "";
-      const roundGuesses: Record<string, { guess: string; isCorrect: boolean; timeMs: number }> = {};
+      const roundGuesses: Record<string, { guess: string; isCorrect: boolean; timeMs: number; cost?: number; tokens?: number }> = {};
       let guessCost = 0;
       let guessTokens = 0;
 
@@ -335,6 +339,8 @@ export default function AIDuelPage() {
                 guess: event.guess,
                 isCorrect,
                 timeMs: event.generationTimeMs,
+                cost: event.cost,
+                tokens: event.usage?.totalTokens,
               };
               // Remove from guessing set and update state
               setGuessingModels((prev) => {
@@ -401,6 +407,34 @@ export default function AIDuelPage() {
 
       const isLastRound = roundNum >= state.totalRounds;
 
+      // Auto-save each round to gallery (outside of state updater to avoid duplicate calls)
+      saveSession.mutate({
+        mode: "ai_duel",
+        prompt,
+        totalCost: drawCost + guessCost,
+        totalTokens: drawTokens + guessTokens,
+        totalTimeMs: (drawTokens + guessTokens) * 10, // Approximate
+        drawings: [
+          {
+            modelId: drawerId,
+            svg: finalSvg,
+            generationTimeMs: drawTokens * 10, // Approximate
+            cost: drawCost,
+            tokens: drawTokens,
+            isWinner: !winner, // Drawer wins if no one guessed correctly
+            chunks: drawChunks,
+          },
+        ],
+        guesses: Object.entries(roundGuesses).map(([modelId, g]) => ({
+          modelId,
+          guess: g.guess,
+          isCorrect: g.isCorrect,
+          generationTimeMs: g.timeMs,
+          cost: g.cost,
+          tokens: g.tokens,
+        })),
+      });
+
       setState((prev) => ({
         ...prev,
         leaderboard: finalLeaderboard,
@@ -431,7 +465,7 @@ export default function AIDuelPage() {
       isRunningRef.current = false;
       setState((prev) => ({ ...prev, status: "paused" }));
     }
-  }, [state.totalRounds, state.autoPlay, state.speed, svgToPng]);
+  }, [state.totalRounds, state.autoPlay, state.speed, svgToPng, saveSession]);
 
   const startDuel = useCallback(() => {
     if (state.selectedModels.length < 3) return;
