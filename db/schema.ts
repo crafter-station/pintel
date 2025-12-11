@@ -2,16 +2,17 @@ import { pgTable, uuid, text, real, integer, boolean, timestamp } from "drizzle-
 import { relations } from "drizzle-orm";
 import { z } from "zod";
 
-// Zod schemas for type safety
-export const GameModeSchema = z.enum(["human_judge", "model_guess", "ai_duel"]);
+export const GameModeSchema = z.enum(["pictionary", "human_judge", "model_guess", "ai_duel"]);
 
 export const gameSessions = pgTable("game_sessions", {
   id: uuid("id").primaryKey().defaultRandom(),
-  mode: text("mode", { enum: ["human_judge", "model_guess", "ai_duel"] }).notNull(),
+  mode: text("mode", { enum: ["pictionary", "human_judge", "model_guess", "ai_duel"] }).notNull(),
   prompt: text("prompt").notNull(),
   totalCost: real("total_cost").default(0),
   totalTokens: integer("total_tokens").default(0),
   totalTimeMs: integer("total_time_ms"),
+  currentRound: integer("current_round").default(1),
+  totalRounds: integer("total_rounds").default(1),
   anonId: text("anon_id"),
   clerkUserId: text("clerk_user_id"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -35,6 +36,10 @@ export const guesses = pgTable("guesses", {
   modelId: text("model_id").notNull(),
   guess: text("guess").notNull(),
   isCorrect: boolean("is_correct").default(false),
+  semanticScore: real("semantic_score"),
+  timeBonus: integer("time_bonus").default(0),
+  finalScore: integer("final_score").default(0),
+  isHuman: boolean("is_human").default(false),
   generationTimeMs: integer("generation_time_ms"),
   cost: real("cost"),
   tokens: integer("tokens"),
