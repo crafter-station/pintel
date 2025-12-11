@@ -25,15 +25,6 @@
   --color-border-subtle: oklch(0.20 0.01 260);
 }
 
-body {
-  @apply bg-surface text-white antialiased;
-  font-family: var(--font-sans);
-}
-
-* {
-  @apply border-border;
-}
-
 @theme inline {
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
@@ -70,6 +61,7 @@ body {
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
+  --color-edge: var(--edge);
 }
 
 :root {
@@ -148,4 +140,26 @@ body {
   body {
     @apply bg-background text-foreground;
   }
+}
+
+@layer utilities {
+  .screen-line-before {
+    @apply relative before:absolute before:top-0 before:-left-[100vw] before:-z-1 before:h-px before:w-[200vw] before:bg-edge;
+  }
+
+  .screen-line-after {
+    @apply relative after:absolute after:bottom-0 after:-left-[100vw] after:-z-1 after:h-px after:w-[200vw] after:bg-edge;
+  }
+
+  .link {
+    @apply font-medium underline underline-offset-4;
+  }
+}
+
+:root {
+  --edge: color-mix(in oklab, var(--border) 64%, var(--background));
+}
+
+.dark {
+  --edge: color-mix(in oklab, var(--border) 64%, var(--background));
 }
