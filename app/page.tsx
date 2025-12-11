@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { GameModeCard } from "@/components/game-mode-card";
 import { SectionSeparator } from "@/components/section-separator";
+import { GithubLogoThemeAware } from "@/components/logos/github-theme-aware";
 import { contentContainer } from "@/lib/grid-patterns";
 import { Brush, MessageCircle, Sparkles } from "lucide-react";
 
@@ -84,11 +85,13 @@ export default function Home() {
         </p>
         <Button variant="outline" size="sm" asChild>
           <a
-            href="https://github.com"
+            href="https://github.com/crafter-station/pintel"
             target="_blank"
             rel="noopener noreferrer"
+            className="flex items-center justify-center"
+            aria-label="View on GitHub"
           >
-            View on GitHub
+            <GithubLogoThemeAware className="size-4" variant="invertocat" />
           </a>
         </Button>
       </footer>

@@ -1,5 +1,6 @@
 import { cn } from "@/lib/utils";
 import { CrafterStationLogo } from "@/components/logos/crafter-station";
+import { GithubLogoThemeAware } from "@/components/logos/github-theme-aware";
 
 const footerGridPattern = cn(
   "screen-line-before screen-line-after flex w-full before:z-1 after:z-1",
@@ -31,12 +32,13 @@ export function SiteFooter() {
         <div className={footerGridPattern}>
           <div className="mx-auto flex items-center justify-center gap-3 border-x border-edge bg-background px-4">
             <a
-              className="flex font-mono text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+              className="flex items-center transition-colors hover:opacity-80"
               href="https://github.com/crafter-station/pintel"
               target="_blank"
               rel="noopener noreferrer"
+              aria-label="GitHub"
             >
-              GitHub
+              <GithubLogoThemeAware className="size-5" variant="invertocat" />
             </a>
 
             <Separator />
