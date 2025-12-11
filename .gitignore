@@ -23,7 +23,8 @@ yarn-error.log*
 # Misc
 .DS_Store
 *.pem
+tsconfig.tsbuildinfo
 
 # clerk configuration (can include secrets)
 /.clerk/
-.cursor/
+.cursor
