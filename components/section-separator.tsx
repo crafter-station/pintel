@@ -1,3 +1,3 @@
 export function SectionSeparator() {
-  return <div className="screen-line-after" />;
+	return <div className="screen-line-after" />;
 }
