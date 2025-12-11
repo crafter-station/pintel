@@ -26,4 +26,4 @@ yarn-error.log*
 
 # clerk configuration (can include secrets)
 /.clerk/
-.cursor/tsconfig.tsbuildinfo
+.cursor
