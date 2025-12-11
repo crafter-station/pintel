@@ -2,6 +2,7 @@ import { Brush, MessageCircle, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { GameModeCard } from "@/components/game-mode-card";
 import { GithubLogoThemeAware } from "@/components/logos/github-theme-aware";
+import { PintelLogoThemeAware } from "@/components/logos/pintel-theme-aware";
 import { SectionSeparator } from "@/components/section-separator";
 import { Button } from "@/components/ui/button";
 import { contentContainer } from "@/lib/grid-patterns";
@@ -37,7 +38,9 @@ export default function Home() {
 	return (
 		<div className={`${contentContainer} space-y-12 py-8`}>
 			<header className="text-center space-y-4">
-				<h1 className="text-5xl font-mono font-light tracking-tight">pintel</h1>
+				<div className="flex justify-center">
+					<PintelLogoThemeAware className="h-40 w-auto" />
+				</div>
 				<p className="text-muted-foreground font-mono text-sm tracking-widest">
 					draw &bull; guess &bull; evaluate
 				</p>

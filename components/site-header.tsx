@@ -4,6 +4,7 @@ import Link from "next/link";
 import { AuthButtons } from "@/components/auth-buttons";
 import { DesktopNav } from "@/components/desktop-nav";
 import { MobileNav } from "@/components/mobile-nav";
+import { PintelLogoThemeAware } from "@/components/logos/pintel-theme-aware";
 import { ToggleTheme } from "@/components/toggle-theme";
 import { MAIN_NAV } from "@/config/site";
 import { cn } from "@/lib/utils";
@@ -25,7 +26,7 @@ export function SiteHeader() {
 		<SiteHeaderWrapper className={headerWrapperClasses}>
 			<div className={headerContainerClasses} data-header-container>
 				<Link href="/" className="flex items-center gap-2" aria-label="Home">
-					<span className="text-lg font-bold">pintel</span>
+					<PintelLogoThemeAware className="h-12 w-auto" />
 				</Link>
 
 				<div className="flex-1" />
