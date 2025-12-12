@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Spinner } from "@/components/ui/spinner";
 import { getVisionModels, shuffleModels } from "@/lib/models";
+import { getRandomPrompt } from "@/lib/prompts";
 import { cn } from "@/lib/utils";
 
 interface GameState {
@@ -43,10 +44,10 @@ export default function HumanPlayPage() {
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [drawingDataUrl, setDrawingDataUrl] = useState<string>("");
   const [isGuessing, setIsGuessing] = useState(false);
+  const [prompt, setPrompt] = useState<string>(() => getRandomPrompt());
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const lastGuessTimeRef = useRef<number>(0);
 
-  // Auto-scroll chat to bottom
   useEffect(() => {
     if (chatContainerRef.current) {
       chatContainerRef.current.scrollTop =
@@ -54,14 +55,12 @@ export default function HumanPlayPage() {
     }
   }, [chatMessages]);
 
-  // Format time as M:SS
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
     return `${mins}:${secs.toString().padStart(2, "0")}`;
   };
 
-  // Trigger guess from all models
   const triggerGuess = useCallback(
     async (round: number) => {
       if (!drawingDataUrl || isGuessing) return;
@@ -134,7 +133,6 @@ export default function HumanPlayPage() {
     [drawingDataUrl, selectedModels, isGuessing],
   );
 
-  // Timer effect
   useEffect(() => {
     if (gameState.status !== "playing") return;
 
@@ -142,12 +140,10 @@ export default function HumanPlayPage() {
       setGameState((prev) => {
         const newTime = prev.timeRemaining - 1;
 
-        // Check if we should trigger a guess (every 10 seconds)
         const currentTenSecond = Math.floor((120 - newTime) / 10);
         const lastTenSecond = Math.floor((120 - prev.timeRemaining) / 10);
 
         if (currentTenSecond > lastTenSecond && newTime > 0) {
-          // Trigger guess in next tick to avoid state update issues
           setTimeout(() => triggerGuess(currentTenSecond), 0);
         }
 
@@ -182,6 +178,7 @@ export default function HumanPlayPage() {
   const resetGame = () => {
     setChatMessages([]);
     setDrawingDataUrl("");
+    setPrompt(getRandomPrompt());
     setGameState({
       status: "idle",
       timeRemaining: 120,
@@ -191,21 +188,18 @@ export default function HumanPlayPage() {
 
   return (
     <div className="flex flex-col lg:flex-row gap-6 h-[calc(100vh-12rem)]">
-      {/* Left Column - Players */}
       <Card className="w-full lg:w-56 shrink-0 h-fit">
         <CardContent className="p-4 space-y-3">
           <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
             Players
           </h3>
 
-          {/* You - highlighted at top */}
           <div className="flex items-center gap-3 p-3 rounded-lg bg-primary/10 border border-primary/20">
             <div className="size-3 rounded-full bg-primary ring-2 ring-primary/30" />
             <span className="text-sm font-medium text-primary">You</span>
             <User className="size-4 ml-auto text-primary" />
           </div>
 
-          {/* AI Models */}
           <div className="space-y-2">
             {selectedModels.map((model) => (
               <div
@@ -231,7 +225,6 @@ export default function HumanPlayPage() {
 
       <Card className="flex-1 min-w-0 h-fit">
         <CardContent className="p-6 flex flex-col items-center gap-6">
-          {/* Timer */}
           <div className="flex items-center gap-4">
             <Badge
               variant={gameState.status === "playing" ? "default" : "secondary"}
@@ -240,6 +233,17 @@ export default function HumanPlayPage() {
               <Clock className="size-4 mr-2" />
               {formatTime(gameState.timeRemaining)}
             </Badge>
+
+            <span className="text-lg font-medium">
+              <span className="text-primary">{prompt}</span>
+            </span>
+
+            {gameState.status === "idle" && (
+              <Button size="lg" onClick={startGame}>
+                <Play className="size-4 mr-2" />
+                Start
+              </Button>
+            )}
             {gameState.status === "playing" && (
               <span className="text-sm text-muted-foreground">
                 Next guess in {10 - (gameState.timeRemaining % 10)}s
@@ -255,12 +259,6 @@ export default function HumanPlayPage() {
           />
 
           <div className="flex gap-4">
-            {gameState.status === "idle" && (
-              <Button size="lg" onClick={startGame}>
-                <Play className="size-4 mr-2" />
-                Start Drawing
-              </Button>
-            )}
             {gameState.status === "playing" && (
               <Button variant="outline" onClick={resetGame}>
                 <RotateCcw className="size-4 mr-2" />
@@ -283,8 +281,8 @@ export default function HumanPlayPage() {
 
           {gameState.status === "idle" && (
             <p className="text-sm text-muted-foreground text-center">
-              Click "Start Drawing" to begin. AI models will guess what you're
-              drawing every 10 seconds for 2 minutes.
+              AI models will guess what you're drawing every 10 seconds for 2
+              minutes.
             </p>
           )}
           {gameState.status === "finished" && (
