@@ -172,7 +172,6 @@ export default function HumanPlayPage() {
 
   const startGame = () => {
     setChatMessages([]);
-    lastGuessTimeRef.current = 0;
     setGameState({
       status: "playing",
       timeRemaining: 120,
@@ -183,7 +182,6 @@ export default function HumanPlayPage() {
   const resetGame = () => {
     setChatMessages([]);
     setDrawingDataUrl("");
-    lastGuessTimeRef.current = 0;
     setGameState({
       status: "idle",
       timeRemaining: 120,
@@ -192,9 +190,9 @@ export default function HumanPlayPage() {
   };
 
   return (
-    <div className="flex flex-col lg:flex-row gap-6 min-h-[calc(100vh-12rem)]">
+    <div className="flex flex-col lg:flex-row gap-6 h-[calc(100vh-12rem)]">
       {/* Left Column - Players */}
-      <Card className="w-full lg:w-56 shrink-0">
+      <Card className="w-full lg:w-56 shrink-0 h-fit">
         <CardContent className="p-4 space-y-3">
           <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
             Players
@@ -231,8 +229,7 @@ export default function HumanPlayPage() {
         </CardContent>
       </Card>
 
-      {/* Middle Column - Game Area */}
-      <Card className="flex-1 min-w-0">
+      <Card className="flex-1 min-w-0 h-fit">
         <CardContent className="p-6 flex flex-col items-center gap-6">
           {/* Timer */}
           <div className="flex items-center gap-4">
@@ -250,7 +247,6 @@ export default function HumanPlayPage() {
             )}
           </div>
 
-          {/* Drawing Canvas */}
           <DrawingCanvas
             onDrawingChange={setDrawingDataUrl}
             width={400}
@@ -258,7 +254,6 @@ export default function HumanPlayPage() {
             className="w-full max-w-md"
           />
 
-          {/* Controls */}
           <div className="flex gap-4">
             {gameState.status === "idle" && (
               <Button size="lg" onClick={startGame}>
@@ -286,7 +281,6 @@ export default function HumanPlayPage() {
             )}
           </div>
 
-          {/* Status */}
           {gameState.status === "idle" && (
             <p className="text-sm text-muted-foreground text-center">
               Click "Start Drawing" to begin. AI models will guess what you're
@@ -301,10 +295,9 @@ export default function HumanPlayPage() {
         </CardContent>
       </Card>
 
-      {/* Right Column - Chat */}
-      <Card className="w-full lg:w-80 shrink-0 flex flex-col">
-        <CardContent className="flex-1 flex flex-col p-4 min-h-[400px]">
-          <div className="flex items-center gap-2 mb-4">
+      <Card className="w-full lg:w-80 shrink-0 lg:h-full lg:max-h-[calc(100vh-12rem)] flex flex-col">
+        <CardContent className="flex-1 flex flex-col p-4 overflow-hidden">
+          <div className="flex items-center gap-2 mb-4 shrink-0">
             <MessageCircle className="size-4 text-muted-foreground" />
             <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
               AI Guesses
@@ -316,10 +309,9 @@ export default function HumanPlayPage() {
             )}
           </div>
 
-          {/* Messages Container */}
           <div
             ref={chatContainerRef}
-            className="flex-1 overflow-y-auto space-y-2 rounded-lg bg-muted/30 p-3"
+            className="flex-1 overflow-y-auto space-y-2 rounded-lg bg-muted/30 p-3 min-h-0"
           >
             {chatMessages.length === 0 ? (
               <div className="h-full flex items-center justify-center">

@@ -161,7 +161,6 @@ export default function HumanJudgePage() {
       roundCost: 0,
     }));
 
-    // Initialize generating models state
     setGeneratingModels(
       gameState.selectedModels.map((modelId) => {
         const model = getModelById(modelId);
@@ -191,7 +190,7 @@ export default function HumanJudgePage() {
       const decoder = new TextDecoder();
       let buffer = "";
       const completedDrawings: Drawing[] = [];
-      const chunksMap = new Map<string, string[]>(); // Track chunks per model for replay
+      const chunksMap = new Map<string, string[]>();
       let totalCost = 0;
       let totalTokens = 0;
       let totalTimeMs = 0;
@@ -319,7 +318,6 @@ export default function HumanJudgePage() {
   const confirmVote = useCallback(() => {
     if (!gameState.selectedDrawing) return;
 
-    // Save to gallery (outside of state updater to avoid duplicate calls)
     saveSession.mutate({
       mode: "human_judge",
       prompt: gameState.prompt,
