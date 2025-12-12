@@ -1,6 +1,8 @@
 "use client";
 
 import {
+  ArrowRight,
+  Check,
   Clock,
   MessageCircle,
   Pencil,
@@ -8,6 +10,7 @@ import {
   RotateCcw,
   Send,
   Star,
+  Trophy,
   User,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -52,6 +55,7 @@ interface ChatMessage {
   guess: string;
   timestamp: number;
   isCorrect: boolean;
+  similarity?: number;
 }
 
 function generateHint(prompt: string): string {
@@ -98,15 +102,34 @@ function revealRandomLetter(
   return [...revealedIndices, randomIndex];
 }
 
-function normalizeGuess(text: string): string {
-  return text
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9\s]/g, "");
-}
+// Semantic guess checking via API
+async function checkGuessSemantics(
+  guess: string,
+  prompt: string,
+): Promise<{ isCorrect: boolean; similarity: number }> {
+  try {
+    const response = await fetch("/api/check-guess", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ guess, prompt }),
+    });
 
-function checkCorrectGuess(guess: string, prompt: string): boolean {
-  return normalizeGuess(guess) === normalizeGuess(prompt);
+    if (!response.ok) {
+      throw new Error("Failed to check guess");
+    }
+
+    return await response.json();
+  } catch {
+    // Fallback to simple comparison
+    const normalize = (text: string) =>
+      text
+        .toLowerCase()
+        .trim()
+        .replace(/^(a|an|the)\s+/i, "")
+        .replace(/[^a-z0-9\s]/g, "");
+    const isCorrect = normalize(guess) === normalize(prompt);
+    return { isCorrect, similarity: isCorrect ? 1.0 : 0 };
+  }
 }
 
 // Convert SVG string to PNG data URL
@@ -205,61 +228,58 @@ export default function HumanPlayPage() {
       status: "turn-ended",
       winner,
     }));
-
-    setTimeout(() => {
-      advanceToNextTurn();
-    }, 2500);
+    // No auto-advance - user clicks to continue
   }, []);
 
-  // Advance to next turn
+  // Advance to next turn (called when user clicks Continue)
   const advanceToNextTurn = useCallback(() => {
-    setGameState((prev) => {
-      const nextTurnIndex = prev.currentTurnIndex + 1;
-      const totalPlayers = players.length;
+    const nextTurnIndex = gameState.currentTurnIndex + 1;
+    const totalPlayers = players.length;
 
-      if (nextTurnIndex >= totalPlayers) {
-        const nextRound = prev.currentRound + 1;
+    if (nextTurnIndex >= totalPlayers) {
+      const nextRound = gameState.currentRound + 1;
 
-        if (nextRound > TOTAL_ROUNDS) {
-          return {
-            ...prev,
-            status: "game-over",
-            winner: null,
-          };
-        }
-
-        const newPrompt = getRandomPrompt();
-        return {
-          status: "idle",
-          currentRound: nextRound,
-          currentTurnIndex: 0,
-          secretPrompt: newPrompt,
-          hint: generateHint(newPrompt),
-          revealedIndices: [],
-          timeRemaining: TURN_DURATION,
+      if (nextRound > TOTAL_ROUNDS) {
+        setGameState((prev) => ({
+          ...prev,
+          status: "game-over",
           winner: null,
-          aiSvg: null,
-        };
+        }));
+        return;
       }
 
-      const newPrompt = getRandomPrompt();
-      return {
+      // New round - reset to first player
+      setGameState({
         status: "idle",
-        currentRound: prev.currentRound,
-        currentTurnIndex: nextTurnIndex,
-        secretPrompt: newPrompt,
-        hint: generateHint(newPrompt),
+        currentRound: nextRound,
+        currentTurnIndex: 0,
+        secretPrompt: "",
+        hint: "",
         revealedIndices: [],
         timeRemaining: TURN_DURATION,
         winner: null,
         aiSvg: null,
-      };
-    });
+      });
+    } else {
+      // Next player in same round
+      setGameState({
+        status: "idle",
+        currentRound: gameState.currentRound,
+        currentTurnIndex: nextTurnIndex,
+        secretPrompt: "",
+        hint: "",
+        revealedIndices: [],
+        timeRemaining: TURN_DURATION,
+        winner: null,
+        aiSvg: null,
+      });
+    }
 
+    // Clear messages only when advancing
     setChatMessages([]);
     setDrawingDataUrl("");
     setHumanGuess("");
-  }, [players.length]);
+  }, [gameState.currentTurnIndex, gameState.currentRound, players.length]);
 
   const triggerAiGuess = useCallback(
     async (imageDataUrl: string) => {
@@ -311,31 +331,32 @@ export default function HumanPlayPage() {
                   (m) => m.id === event.modelId,
                 );
                 if (model) {
-                  const isCorrect = checkCorrectGuess(
-                    event.guess,
-                    gameState.secretPrompt,
+                  // Check guess semantically
+                  checkGuessSemantics(event.guess, gameState.secretPrompt).then(
+                    ({ isCorrect, similarity }) => {
+                      const newMessage: ChatMessage = {
+                        id: `${event.modelId}-${Date.now()}`,
+                        playerId: event.modelId,
+                        playerName: model.name,
+                        playerColor: model.color,
+                        guess: event.guess,
+                        timestamp: Date.now(),
+                        isCorrect,
+                        similarity,
+                      };
+
+                      setChatMessages((prev) => [...prev, newMessage]);
+
+                      if (isCorrect) {
+                        const winnerPlayer = players.find(
+                          (p) => p.id === event.modelId,
+                        );
+                        if (winnerPlayer) {
+                          endTurn(winnerPlayer);
+                        }
+                      }
+                    },
                   );
-
-                  const newMessage: ChatMessage = {
-                    id: `${event.modelId}-${Date.now()}`,
-                    playerId: event.modelId,
-                    playerName: model.name,
-                    playerColor: model.color,
-                    guess: event.guess,
-                    timestamp: Date.now(),
-                    isCorrect,
-                  };
-
-                  setChatMessages((prev) => [...prev, newMessage]);
-
-                  if (isCorrect) {
-                    const winnerPlayer = players.find(
-                      (p) => p.id === event.modelId,
-                    );
-                    if (winnerPlayer) {
-                      endTurn(winnerPlayer);
-                    }
-                  }
                 }
               }
             } catch (e) {
@@ -359,8 +380,14 @@ export default function HumanPlayPage() {
     ],
   );
 
-  const generateAiDrawing = useCallback(async () => {
+  const generateAiDrawing = useCallback(async (promptOverride?: string) => {
     if (!currentDrawer || currentDrawer.isHuman) return;
+
+    const prompt = promptOverride || gameState.secretPrompt;
+    if (!prompt) {
+      console.error("No prompt available for AI drawing");
+      return;
+    }
 
     setGameState((prev) => ({ ...prev, status: "generating" }));
 
@@ -369,7 +396,7 @@ export default function HumanPlayPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          prompt: gameState.secretPrompt,
+          prompt,
           models: [currentDrawer.id],
         }),
       });
@@ -508,7 +535,8 @@ export default function HumanPlayPage() {
         aiSvg: null,
       }));
 
-      setTimeout(() => generateAiDrawing(), 100);
+      // Pass prompt directly to avoid stale closure
+      setTimeout(() => generateAiDrawing(newPrompt), 100);
     }
   };
 
@@ -530,23 +558,29 @@ export default function HumanPlayPage() {
     setHumanGuess("");
   };
 
-  const submitHumanGuess = () => {
+  const submitHumanGuess = async () => {
     if (!humanGuess.trim() || isHumanTurn) return;
 
-    const isCorrect = checkCorrectGuess(humanGuess, gameState.secretPrompt);
+    const guess = humanGuess;
+    setHumanGuess("");
+
+    const { isCorrect, similarity } = await checkGuessSemantics(
+      guess,
+      gameState.secretPrompt,
+    );
 
     const newMessage: ChatMessage = {
       id: `human-${Date.now()}`,
       playerId: "human",
       playerName: "You",
       playerColor: "hsl(var(--primary))",
-      guess: humanGuess,
+      guess,
       timestamp: Date.now(),
       isCorrect,
+      similarity,
     };
 
     setChatMessages((prev) => [...prev, newMessage]);
-    setHumanGuess("");
 
     if (isCorrect) {
       const humanPlayer = players.find((p) => p.isHuman);
@@ -731,32 +765,57 @@ export default function HumanPlayPage() {
           )}
 
           {gameState.status === "turn-ended" && (
-            <div className="text-center space-y-2">
+            <div className="text-center space-y-4 w-full max-w-md">
+              {/* Result Header */}
               {gameState.winner ? (
-                <>
-                  <Badge variant="default" className="text-lg px-4 py-2">
-                    {gameState.winner.name} guessed it!
-                  </Badge>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-center gap-2">
+                    <Trophy className="size-6 text-yellow-500" />
+                    <Badge variant="default" className="text-lg px-4 py-2">
+                      {gameState.winner.name} guessed it!
+                    </Badge>
+                  </div>
                   <p className="text-sm text-muted-foreground">
                     The answer was:{" "}
-                    <span className="font-medium">
+                    <span className="font-semibold text-primary">
                       {gameState.secretPrompt}
                     </span>
                   </p>
-                </>
+                </div>
               ) : (
-                <>
+                <div className="space-y-2">
                   <Badge variant="secondary" className="text-lg px-4 py-2">
+                    <Clock className="size-4 mr-2" />
                     Time's up!
                   </Badge>
                   <p className="text-sm text-muted-foreground">
                     The answer was:{" "}
-                    <span className="font-medium">
+                    <span className="font-semibold text-primary">
                       {gameState.secretPrompt}
                     </span>
                   </p>
-                </>
+                </div>
               )}
+
+              {/* Continue Button */}
+              <Button
+                size="lg"
+                onClick={advanceToNextTurn}
+                className="mt-4 px-8"
+              >
+                {gameState.currentTurnIndex + 1 >= players.length &&
+                gameState.currentRound >= TOTAL_ROUNDS ? (
+                  <>
+                    <Trophy className="size-4" />
+                    See Final Results
+                  </>
+                ) : (
+                  <>
+                    <ArrowRight className="size-4" />
+                    Continue to Next Turn
+                  </>
+                )}
+              </Button>
             </div>
           )}
 
@@ -790,7 +849,7 @@ export default function HumanPlayPage() {
           <div className="flex items-center gap-2 mb-4 shrink-0">
             <MessageCircle className="size-4 text-muted-foreground" />
             <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
-              Guesses
+              {gameState.status === "turn-ended" ? "Turn Summary" : "Guesses"}
             </h3>
             {chatMessages.length > 0 && (
               <Badge variant="secondary" className="ml-auto">
@@ -810,39 +869,76 @@ export default function HumanPlayPage() {
                     ? "Start a turn to see guesses"
                     : gameState.status === "generating"
                       ? "Waiting for drawing..."
-                      : "Waiting for guesses..."}
+                      : gameState.status === "turn-ended"
+                        ? "No guesses were made"
+                        : gameState.status === "game-over"
+                          ? "Thanks for playing!"
+                          : "Waiting for guesses..."}
                 </p>
               </div>
             ) : (
-              chatMessages.map((message) => (
-                <div
-                  key={message.id}
-                  className={cn(
-                    "flex items-start gap-2 p-2 rounded-md",
-                    message.isCorrect
-                      ? "bg-green-500/20 border border-green-500/30"
-                      : "bg-background/50",
-                  )}
-                >
+              // Sort by similarity when turn ended to show best matches first
+              [...chatMessages]
+                .sort((a, b) => {
+                  if (gameState.status === "turn-ended") {
+                    return (b.similarity ?? 0) - (a.similarity ?? 0);
+                  }
+                  return a.timestamp - b.timestamp;
+                })
+                .map((message) => (
                   <div
-                    className="size-2.5 rounded-full shrink-0 mt-1.5"
-                    style={{ backgroundColor: message.playerColor }}
-                  />
-                  <div className="flex-1 min-w-0">
-                    <span className="text-xs font-medium text-muted-foreground">
-                      {message.playerName}
-                    </span>
-                    <p
-                      className={cn(
-                        "text-sm font-medium truncate",
-                        message.isCorrect && "text-green-600",
-                      )}
-                    >
-                      "{message.guess}"{message.isCorrect && " ✓"}
-                    </p>
+                    key={message.id}
+                    className={cn(
+                      "flex items-start gap-2 p-2 rounded-md transition-all",
+                      message.isCorrect
+                        ? "bg-green-500/20 border border-green-500/30"
+                        : message.similarity && message.similarity >= 0.6
+                          ? "bg-yellow-500/10 border border-yellow-500/20"
+                          : message.similarity && message.similarity >= 0.4
+                            ? "bg-orange-500/10 border border-orange-500/20"
+                            : "bg-background/50",
+                    )}
+                  >
+                    <div
+                      className="size-2.5 rounded-full shrink-0 mt-1.5"
+                      style={{ backgroundColor: message.playerColor }}
+                    />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-xs font-medium text-muted-foreground">
+                          {message.playerName}
+                        </span>
+                        {message.similarity !== undefined && (
+                          <span
+                            className={cn(
+                              "text-[10px] font-mono px-1.5 py-0.5 rounded",
+                              message.isCorrect
+                                ? "bg-green-500/20 text-green-600"
+                                : message.similarity >= 0.6
+                                  ? "bg-yellow-500/20 text-yellow-600"
+                                  : message.similarity >= 0.4
+                                    ? "bg-orange-500/20 text-orange-600"
+                                    : "bg-muted text-muted-foreground",
+                            )}
+                          >
+                            {Math.round(message.similarity * 100)}%
+                          </span>
+                        )}
+                      </div>
+                      <p
+                        className={cn(
+                          "text-sm font-medium",
+                          message.isCorrect && "text-green-600",
+                        )}
+                      >
+                        "{message.guess}"
+                        {message.isCorrect && (
+                          <Check className="inline size-3.5 ml-1 text-green-600" />
+                        )}
+                      </p>
+                    </div>
                   </div>
-                </div>
-              ))
+                ))
             )}
           </div>
 
