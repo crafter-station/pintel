@@ -1,31 +1,108 @@
 "use client";
 
-import { Clock, MessageCircle, Play, RotateCcw, User } from "lucide-react";
+import {
+  Clock,
+  MessageCircle,
+  Pencil,
+  Play,
+  RotateCcw,
+  Send,
+  Star,
+  User,
+} from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DrawingCanvas } from "@/components/drawing-canvas";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { getVisionModels, shuffleModels } from "@/lib/models";
 import { getRandomPrompt } from "@/lib/prompts";
 import { cn } from "@/lib/utils";
 
+// Types
+interface Player {
+  id: string;
+  name: string;
+  color: string;
+  isHuman: boolean;
+}
+
 interface GameState {
-  status: "idle" | "playing" | "finished";
+  status: "idle" | "playing" | "generating" | "turn-ended" | "game-over";
+  currentRound: number;
+  currentTurnIndex: number;
+  secretPrompt: string;
+  hint: string;
   timeRemaining: number;
-  guessRound: number;
+  winner: Player | null;
+  aiSvg: string | null;
 }
 
 interface ChatMessage {
   id: string;
-  modelId: string;
-  modelName: string;
-  modelColor: string;
+  playerId: string;
+  playerName: string;
+  playerColor: string;
   guess: string;
   timestamp: number;
-  round: number;
+  isCorrect: boolean;
 }
+
+// Helper functions
+function generateHint(prompt: string): string {
+  return prompt
+    .split("")
+    .map((char) => (char === " " ? "  " : "_"))
+    .join(" ");
+}
+
+function normalizeGuess(text: string): string {
+  return text
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9\s]/g, "");
+}
+
+function checkCorrectGuess(guess: string, prompt: string): boolean {
+  return normalizeGuess(guess) === normalizeGuess(prompt);
+}
+
+// Convert SVG string to PNG data URL
+async function svgToPngDataUrl(svgString: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const svgBlob = new Blob([svgString], { type: "image/svg+xml" });
+    const url = URL.createObjectURL(svgBlob);
+
+    img.onload = () => {
+      const canvas = document.createElement("canvas");
+      canvas.width = 400;
+      canvas.height = 400;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) {
+        reject(new Error("Could not get canvas context"));
+        return;
+      }
+      ctx.fillStyle = "white";
+      ctx.fillRect(0, 0, 400, 400);
+      ctx.drawImage(img, 0, 0, 400, 400);
+      URL.revokeObjectURL(url);
+      resolve(canvas.toDataURL("image/png"));
+    };
+
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error("Failed to load SVG"));
+    };
+
+    img.src = url;
+  });
+}
+
+const TOTAL_ROUNDS = 2;
+const TURN_DURATION = 120; // seconds
 
 export default function HumanPlayPage() {
   // Select 4 random vision models on mount
@@ -35,19 +112,41 @@ export default function HumanPlayPage() {
     [visionModels],
   );
 
+  // Create players array: human first, then AI models
+  const players: Player[] = useMemo(
+    () => [
+      { id: "human", name: "You", color: "hsl(var(--primary))", isHuman: true },
+      ...selectedModels.map((m) => ({
+        id: m.id,
+        name: m.name,
+        color: m.color,
+        isHuman: false,
+      })),
+    ],
+    [selectedModels],
+  );
+
   const [gameState, setGameState] = useState<GameState>({
     status: "idle",
-    timeRemaining: 120,
-    guessRound: 0,
+    currentRound: 1,
+    currentTurnIndex: 0,
+    secretPrompt: "",
+    hint: "",
+    timeRemaining: TURN_DURATION,
+    winner: null,
+    aiSvg: null,
   });
 
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [drawingDataUrl, setDrawingDataUrl] = useState<string>("");
   const [isGuessing, setIsGuessing] = useState(false);
-  const [prompt, setPrompt] = useState<string>(() => getRandomPrompt());
+  const [humanGuess, setHumanGuess] = useState("");
   const chatContainerRef = useRef<HTMLDivElement>(null);
-  const lastGuessTimeRef = useRef<number>(0);
 
+  const currentDrawer = players[gameState.currentTurnIndex];
+  const isHumanTurn = currentDrawer?.isHuman ?? false;
+
+  // Auto-scroll chat to bottom
   useEffect(() => {
     if (chatContainerRef.current) {
       chatContainerRef.current.scrollTop =
@@ -61,19 +160,95 @@ export default function HumanPlayPage() {
     return `${mins}:${secs.toString().padStart(2, "0")}`;
   };
 
-  const triggerGuess = useCallback(
-    async (round: number) => {
-      if (!drawingDataUrl || isGuessing) return;
+  // End turn with optional winner
+  const endTurn = useCallback(
+    (winner: Player | null) => {
+      setGameState((prev) => ({
+        ...prev,
+        status: "turn-ended",
+        winner,
+      }));
+
+      // Auto-advance after 2 seconds
+      setTimeout(() => {
+        advanceToNextTurn();
+      }, 2500);
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  );
+
+  // Advance to next turn
+  const advanceToNextTurn = useCallback(() => {
+    setGameState((prev) => {
+      const nextTurnIndex = prev.currentTurnIndex + 1;
+      const totalPlayers = players.length;
+
+      // Check if round is complete
+      if (nextTurnIndex >= totalPlayers) {
+        const nextRound = prev.currentRound + 1;
+
+        // Check if game is over
+        if (nextRound > TOTAL_ROUNDS) {
+          return {
+            ...prev,
+            status: "game-over",
+            winner: null,
+          };
+        }
+
+        // Start new round
+        const newPrompt = getRandomPrompt();
+        return {
+          status: "idle",
+          currentRound: nextRound,
+          currentTurnIndex: 0,
+          secretPrompt: newPrompt,
+          hint: generateHint(newPrompt),
+          timeRemaining: TURN_DURATION,
+          winner: null,
+          aiSvg: null,
+        };
+      }
+
+      // Continue to next player in same round
+      const newPrompt = getRandomPrompt();
+      return {
+        status: "idle",
+        currentRound: prev.currentRound,
+        currentTurnIndex: nextTurnIndex,
+        secretPrompt: newPrompt,
+        hint: generateHint(newPrompt),
+        timeRemaining: TURN_DURATION,
+        winner: null,
+        aiSvg: null,
+      };
+    });
+
+    setChatMessages([]);
+    setDrawingDataUrl("");
+    setHumanGuess("");
+  }, [players.length]);
+
+  // Trigger AI guesses
+  const triggerAiGuess = useCallback(
+    async (imageDataUrl: string) => {
+      if (!imageDataUrl || isGuessing) return;
 
       setIsGuessing(true);
+
+      // Determine which models should guess (all except current drawer)
+      const guessingModels = selectedModels.filter(
+        (m) => m.id !== currentDrawer?.id,
+      );
 
       try {
         const response = await fetch("/api/guess-drawing", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            imageDataUrl: drawingDataUrl,
-            models: selectedModels.map((m) => m.id),
+            imageDataUrl,
+            models: guessingModels.map((m) => m.id),
           }),
         });
 
@@ -107,16 +282,31 @@ export default function HumanPlayPage() {
                   (m) => m.id === event.modelId,
                 );
                 if (model) {
+                  const isCorrect = checkCorrectGuess(
+                    event.guess,
+                    gameState.secretPrompt,
+                  );
+
                   const newMessage: ChatMessage = {
-                    id: `${event.modelId}-${round}-${Date.now()}`,
-                    modelId: event.modelId,
-                    modelName: model.name,
-                    modelColor: model.color,
+                    id: `${event.modelId}-${Date.now()}`,
+                    playerId: event.modelId,
+                    playerName: model.name,
+                    playerColor: model.color,
                     guess: event.guess,
                     timestamp: Date.now(),
-                    round,
+                    isCorrect,
                   };
+
                   setChatMessages((prev) => [...prev, newMessage]);
+
+                  if (isCorrect) {
+                    const winnerPlayer = players.find(
+                      (p) => p.id === event.modelId,
+                    );
+                    if (winnerPlayer) {
+                      endTurn(winnerPlayer);
+                    }
+                  }
                 }
               }
             } catch (e) {
@@ -130,120 +320,311 @@ export default function HumanPlayPage() {
         setIsGuessing(false);
       }
     },
-    [drawingDataUrl, selectedModels, isGuessing],
+    [
+      selectedModels,
+      currentDrawer?.id,
+      gameState.secretPrompt,
+      isGuessing,
+      players,
+      endTurn,
+    ],
   );
 
+  // Generate AI drawing
+  const generateAiDrawing = useCallback(async () => {
+    if (!currentDrawer || currentDrawer.isHuman) return;
+
+    setGameState((prev) => ({ ...prev, status: "generating" }));
+
+    try {
+      const response = await fetch("/api/generate-drawings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          prompt: gameState.secretPrompt,
+          models: [currentDrawer.id],
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to generate drawing");
+      }
+
+      const reader = response.body?.getReader();
+      if (!reader) throw new Error("No response body");
+
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n\n");
+        buffer = lines.pop() || "";
+
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          const jsonStr = line.slice(6);
+
+          try {
+            const event = JSON.parse(jsonStr);
+
+            if (event.type === "drawing" && event.svg) {
+              setGameState((prev) => ({
+                ...prev,
+                status: "playing",
+                aiSvg: event.svg,
+              }));
+            }
+          } catch (e) {
+            console.error("Failed to parse SSE event:", e);
+          }
+        }
+      }
+    } catch (error) {
+      console.error("Error generating AI drawing:", error);
+      // Skip to next turn on error
+      endTurn(null);
+    }
+  }, [currentDrawer, gameState.secretPrompt, endTurn]);
+
+  // Timer effect
   useEffect(() => {
     if (gameState.status !== "playing") return;
 
-    const interval = setInterval(() => {
+    const interval = setInterval(async () => {
       setGameState((prev) => {
         const newTime = prev.timeRemaining - 1;
 
-        const currentTenSecond = Math.floor((120 - newTime) / 10);
-        const lastTenSecond = Math.floor((120 - prev.timeRemaining) / 10);
-
-        if (currentTenSecond > lastTenSecond && newTime > 0) {
-          setTimeout(() => triggerGuess(currentTenSecond), 0);
-        }
-
         if (newTime <= 0) {
+          setTimeout(() => endTurn(null), 0);
           return {
             ...prev,
             timeRemaining: 0,
-            status: "finished",
           };
+        }
+
+        // Trigger AI guess every 10 seconds
+        const shouldGuess =
+          newTime % 10 === 0 && newTime > 0 && newTime < TURN_DURATION;
+        if (shouldGuess) {
+          if (isHumanTurn && drawingDataUrl) {
+            setTimeout(() => triggerAiGuess(drawingDataUrl), 0);
+          } else if (!isHumanTurn && prev.aiSvg) {
+            // Convert SVG to PNG and trigger guess
+            svgToPngDataUrl(prev.aiSvg)
+              .then((pngDataUrl) => {
+                triggerAiGuess(pngDataUrl);
+              })
+              .catch(console.error);
+          }
         }
 
         return {
           ...prev,
           timeRemaining: newTime,
-          guessRound: currentTenSecond,
         };
       });
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [gameState.status, triggerGuess]);
+  }, [gameState.status, isHumanTurn, drawingDataUrl, triggerAiGuess, endTurn]);
 
-  const startGame = () => {
-    setChatMessages([]);
-    setGameState({
-      status: "playing",
-      timeRemaining: 120,
-      guessRound: 0,
-    });
-  };
-
-  const resetGame = () => {
+  // Start a new turn
+  const startTurn = () => {
+    const newPrompt = getRandomPrompt();
     setChatMessages([]);
     setDrawingDataUrl("");
-    setPrompt(getRandomPrompt());
+    setHumanGuess("");
+
+    if (isHumanTurn) {
+      setGameState((prev) => ({
+        ...prev,
+        status: "playing",
+        secretPrompt: newPrompt,
+        hint: generateHint(newPrompt),
+        timeRemaining: TURN_DURATION,
+        winner: null,
+        aiSvg: null,
+      }));
+    } else {
+      setGameState((prev) => ({
+        ...prev,
+        secretPrompt: newPrompt,
+        hint: generateHint(newPrompt),
+        timeRemaining: TURN_DURATION,
+        winner: null,
+        aiSvg: null,
+      }));
+      // Generate AI drawing (this will set status to "generating" then "playing")
+      setTimeout(() => generateAiDrawing(), 100);
+    }
+  };
+
+  // Start new game
+  const startGame = () => {
     setGameState({
       status: "idle",
-      timeRemaining: 120,
-      guessRound: 0,
+      currentRound: 1,
+      currentTurnIndex: 0,
+      secretPrompt: "",
+      hint: "",
+      timeRemaining: TURN_DURATION,
+      winner: null,
+      aiSvg: null,
     });
+    setChatMessages([]);
+    setDrawingDataUrl("");
+    setHumanGuess("");
+  };
+
+  // Handle human guess submission
+  const submitHumanGuess = () => {
+    if (!humanGuess.trim() || isHumanTurn) return;
+
+    const isCorrect = checkCorrectGuess(humanGuess, gameState.secretPrompt);
+
+    const newMessage: ChatMessage = {
+      id: `human-${Date.now()}`,
+      playerId: "human",
+      playerName: "You",
+      playerColor: "hsl(var(--primary))",
+      guess: humanGuess,
+      timestamp: Date.now(),
+      isCorrect,
+    };
+
+    setChatMessages((prev) => [...prev, newMessage]);
+    setHumanGuess("");
+
+    if (isCorrect) {
+      const humanPlayer = players.find((p) => p.isHuman);
+      if (humanPlayer) {
+        endTurn(humanPlayer);
+      }
+    }
   };
 
   return (
     <div className="flex flex-col lg:flex-row gap-6 h-[calc(100vh-12rem)]">
+      {/* Left Column - Players */}
       <Card className="w-full lg:w-56 shrink-0 h-fit">
         <CardContent className="p-4 space-y-3">
-          <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
-            Players
-          </h3>
-
-          <div className="flex items-center gap-3 p-3 rounded-lg bg-primary/10 border border-primary/20">
-            <div className="size-3 rounded-full bg-primary ring-2 ring-primary/30" />
-            <span className="text-sm font-medium text-primary">You</span>
-            <User className="size-4 ml-auto text-primary" />
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
+              Players
+            </h3>
+            <Badge variant="outline">
+              Round {gameState.currentRound}/{TOTAL_ROUNDS}
+            </Badge>
           </div>
 
-          <div className="space-y-2">
-            {selectedModels.map((model) => (
+          {players.map((player, index) => {
+            const isCurrentDrawer = index === gameState.currentTurnIndex;
+            const isDrawing =
+              isCurrentDrawer &&
+              (gameState.status === "playing" ||
+                gameState.status === "generating");
+
+            return (
               <div
-                key={model.id}
+                key={player.id}
                 className={cn(
-                  "flex items-center gap-3 p-3 rounded-lg bg-muted/50 transition-all",
-                  isGuessing && "animate-pulse",
+                  "flex items-center gap-3 p-3 rounded-lg transition-all",
+                  player.isHuman
+                    ? "bg-primary/10 border border-primary/20"
+                    : "bg-muted/50",
+                  isCurrentDrawer && "ring-2 ring-primary",
                 )}
               >
-                <div
-                  className="size-3 rounded-full shrink-0"
-                  style={{ backgroundColor: model.color }}
-                />
-                <span className="text-sm font-medium truncate">
-                  {model.name}
+                {isDrawing ? (
+                  <Pencil
+                    className="size-4 shrink-0"
+                    style={{ color: player.isHuman ? undefined : player.color }}
+                  />
+                ) : isCurrentDrawer ? (
+                  <Star
+                    className="size-4 shrink-0 fill-current"
+                    style={{ color: player.isHuman ? undefined : player.color }}
+                  />
+                ) : (
+                  <div
+                    className="size-3 rounded-full shrink-0"
+                    style={{
+                      backgroundColor: player.isHuman
+                        ? "hsl(var(--primary))"
+                        : player.color,
+                    }}
+                  />
+                )}
+                <span
+                  className={cn(
+                    "text-sm font-medium truncate",
+                    player.isHuman && "text-primary",
+                  )}
+                >
+                  {player.name}
                 </span>
-                {isGuessing && <Spinner className="size-3 ml-auto" />}
+                {player.isHuman && (
+                  <User className="size-4 ml-auto text-primary" />
+                )}
+                {!player.isHuman && isGuessing && isCurrentDrawer && (
+                  <Spinner className="size-3 ml-auto" />
+                )}
               </div>
-            ))}
-          </div>
+            );
+          })}
         </CardContent>
       </Card>
 
+      {/* Middle Column - Game Area */}
       <Card className="flex-1 min-w-0 h-fit">
         <CardContent className="p-6 flex flex-col items-center gap-6">
-          <div className="flex items-center gap-4">
+          {/* Timer, Hint, and Controls */}
+          <div className="flex items-center gap-4 flex-wrap justify-center">
             <Badge
-              variant={gameState.status === "playing" ? "default" : "secondary"}
+              variant={
+                gameState.status === "playing" ||
+                gameState.status === "generating"
+                  ? "default"
+                  : "secondary"
+              }
               className="text-lg px-4 py-2"
             >
               <Clock className="size-4 mr-2" />
               {formatTime(gameState.timeRemaining)}
             </Badge>
 
-            <span className="text-lg font-medium">
-              <span className="text-primary">{prompt}</span>
-            </span>
+            {gameState.status !== "idle" &&
+              gameState.status !== "game-over" && (
+                <div className="text-center">
+                  {isHumanTurn && gameState.status === "playing" ? (
+                    <span className="text-lg font-medium">
+                      Draw:{" "}
+                      <span className="text-primary">
+                        {gameState.secretPrompt}
+                      </span>
+                    </span>
+                  ) : (
+                    <span className="text-lg font-mono tracking-widest">
+                      {gameState.hint}
+                    </span>
+                  )}
+                </div>
+              )}
 
             {gameState.status === "idle" && (
-              <Button size="lg" onClick={startGame}>
+              <Button size="lg" onClick={startTurn}>
                 <Play className="size-4 mr-2" />
-                Start
+                {gameState.currentTurnIndex === 0 &&
+                gameState.currentRound === 1
+                  ? "Start Game"
+                  : "Start Turn"}
               </Button>
             )}
+
             {gameState.status === "playing" && (
               <span className="text-sm text-muted-foreground">
                 Next guess in {10 - (gameState.timeRemaining % 10)}s
@@ -251,54 +632,100 @@ export default function HumanPlayPage() {
             )}
           </div>
 
-          <DrawingCanvas
-            onDrawingChange={setDrawingDataUrl}
-            width={400}
-            height={400}
-            className="w-full max-w-md"
-          />
+          {/* Drawing Area */}
+          {gameState.status === "generating" ? (
+            <div className="w-full max-w-md aspect-square flex items-center justify-center bg-muted/30 rounded-lg border-2 border-dashed">
+              <div className="text-center space-y-2">
+                <Spinner className="size-8 mx-auto" />
+                <p className="text-sm text-muted-foreground">
+                  {currentDrawer?.name} is drawing...
+                </p>
+              </div>
+            </div>
+          ) : isHumanTurn || gameState.status === "idle" ? (
+            <DrawingCanvas
+              onDrawingChange={setDrawingDataUrl}
+              width={400}
+              height={400}
+              className="w-full max-w-md"
+            />
+          ) : gameState.aiSvg ? (
+            <div
+              className="w-full max-w-md aspect-square bg-white rounded-lg border overflow-hidden"
+              dangerouslySetInnerHTML={{ __html: gameState.aiSvg }}
+            />
+          ) : (
+            <div className="w-full max-w-md aspect-square flex items-center justify-center bg-muted/30 rounded-lg border-2 border-dashed">
+              <p className="text-sm text-muted-foreground">
+                Waiting for drawing...
+              </p>
+            </div>
+          )}
 
-          <div className="flex gap-4">
-            {gameState.status === "playing" && (
-              <Button variant="outline" onClick={resetGame}>
+          {/* Turn Result Overlay */}
+          {gameState.status === "turn-ended" && (
+            <div className="text-center space-y-2">
+              {gameState.winner ? (
+                <>
+                  <Badge variant="default" className="text-lg px-4 py-2">
+                    {gameState.winner.name} guessed it!
+                  </Badge>
+                  <p className="text-sm text-muted-foreground">
+                    The answer was:{" "}
+                    <span className="font-medium">
+                      {gameState.secretPrompt}
+                    </span>
+                  </p>
+                </>
+              ) : (
+                <>
+                  <Badge variant="secondary" className="text-lg px-4 py-2">
+                    Time's up!
+                  </Badge>
+                  <p className="text-sm text-muted-foreground">
+                    The answer was:{" "}
+                    <span className="font-medium">
+                      {gameState.secretPrompt}
+                    </span>
+                  </p>
+                </>
+              )}
+            </div>
+          )}
+
+          {/* Game Over */}
+          {gameState.status === "game-over" && (
+            <div className="text-center space-y-4">
+              <Badge variant="default" className="text-xl px-6 py-3">
+                Game Over!
+              </Badge>
+              <Button size="lg" onClick={startGame}>
                 <RotateCcw className="size-4 mr-2" />
-                Reset
+                Play Again
               </Button>
-            )}
-            {gameState.status === "finished" && (
-              <>
-                <Button size="lg" onClick={startGame}>
-                  <Play className="size-4 mr-2" />
-                  Play Again
-                </Button>
-                <Button variant="outline" onClick={resetGame}>
-                  <RotateCcw className="size-4 mr-2" />
-                  Reset
-                </Button>
-              </>
-            )}
-          </div>
+            </div>
+          )}
 
-          {gameState.status === "idle" && (
-            <p className="text-sm text-muted-foreground text-center">
-              AI models will guess what you're drawing every 10 seconds for 2
-              minutes.
-            </p>
-          )}
-          {gameState.status === "finished" && (
-            <p className="text-sm text-muted-foreground text-center">
-              Time's up! Check the chat to see all the guesses.
-            </p>
-          )}
+          {/* Instructions */}
+          {gameState.status === "idle" &&
+            gameState.currentRound === 1 &&
+            gameState.currentTurnIndex === 0 && (
+              <p className="text-sm text-muted-foreground text-center max-w-md">
+                Take turns drawing! When it's your turn, draw the prompt. When
+                AI models draw, try to guess what they're drawing. Each player
+                has 2 minutes per turn.
+              </p>
+            )}
         </CardContent>
       </Card>
 
+      {/* Right Column - Chat */}
       <Card className="w-full lg:w-80 shrink-0 lg:h-full lg:max-h-[calc(100vh-12rem)] flex flex-col">
         <CardContent className="flex-1 flex flex-col p-4 overflow-hidden">
           <div className="flex items-center gap-2 mb-4 shrink-0">
             <MessageCircle className="size-4 text-muted-foreground" />
             <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
-              AI Guesses
+              Guesses
             </h3>
             {chatMessages.length > 0 && (
               <Badge variant="secondary" className="ml-auto">
@@ -315,34 +742,60 @@ export default function HumanPlayPage() {
               <div className="h-full flex items-center justify-center">
                 <p className="text-sm text-muted-foreground text-center">
                   {gameState.status === "idle"
-                    ? "Start drawing to see AI guesses"
-                    : gameState.status === "playing"
-                      ? "Waiting for first guess..."
-                      : "No guesses yet"}
+                    ? "Start a turn to see guesses"
+                    : gameState.status === "generating"
+                      ? "Waiting for drawing..."
+                      : "Waiting for guesses..."}
                 </p>
               </div>
             ) : (
               chatMessages.map((message) => (
                 <div
                   key={message.id}
-                  className="flex items-start gap-2 p-2 rounded-md bg-background/50"
+                  className={cn(
+                    "flex items-start gap-2 p-2 rounded-md",
+                    message.isCorrect
+                      ? "bg-green-500/20 border border-green-500/30"
+                      : "bg-background/50",
+                  )}
                 >
                   <div
                     className="size-2.5 rounded-full shrink-0 mt-1.5"
-                    style={{ backgroundColor: message.modelColor }}
+                    style={{ backgroundColor: message.playerColor }}
                   />
                   <div className="flex-1 min-w-0">
                     <span className="text-xs font-medium text-muted-foreground">
-                      {message.modelName}
+                      {message.playerName}
                     </span>
-                    <p className="text-sm font-medium truncate">
-                      "{message.guess}"
+                    <p
+                      className={cn(
+                        "text-sm font-medium truncate",
+                        message.isCorrect && "text-green-600",
+                      )}
+                    >
+                      "{message.guess}"{message.isCorrect && " ✓"}
                     </p>
                   </div>
                 </div>
               ))
             )}
           </div>
+
+          {/* Human Guess Input - only show when AI is drawing */}
+          {!isHumanTurn && gameState.status === "playing" && (
+            <div className="mt-4 flex gap-2 shrink-0">
+              <Input
+                value={humanGuess}
+                onChange={(e) => setHumanGuess(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && submitHumanGuess()}
+                placeholder="Type your guess..."
+                className="flex-1"
+              />
+              <Button size="icon" onClick={submitHumanGuess}>
+                <Send className="size-4" />
+              </Button>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>
