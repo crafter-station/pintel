@@ -358,7 +358,7 @@ export default function ModelGuessPage() {
           <div className="flex-1">
             <h1 className="text-2xl font-mono font-light">Model Guess</h1>
             <p className="text-sm text-muted-foreground">
-              You draw, AI guesses
+              Choose AI models that will try to guess your drawings
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -386,14 +386,6 @@ export default function ModelGuessPage() {
         {/* Setup - Model Selection */}
         {gameState.status === "setup" && (
           <div className="space-y-6">
-            <div className="text-center space-y-2">
-              <Eye className="size-12 mx-auto text-primary" />
-              <h2 className="text-2xl font-light">Select Vision Models</h2>
-              <p className="text-muted-foreground">
-                Choose AI models that will try to guess your drawings
-              </p>
-            </div>
-
             <Card>
               <CardContent className="p-6">
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
