@@ -21,7 +21,6 @@ import { getVisionModels, shuffleModels } from "@/lib/models";
 import { getRandomPrompt } from "@/lib/prompts";
 import { cn } from "@/lib/utils";
 
-// Types
 interface Player {
   id: string;
   name: string;
@@ -35,6 +34,7 @@ interface GameState {
   currentTurnIndex: number;
   secretPrompt: string;
   hint: string;
+  revealedIndices: number[];
   timeRemaining: number;
   winner: Player | null;
   aiSvg: string | null;
@@ -50,12 +50,48 @@ interface ChatMessage {
   isCorrect: boolean;
 }
 
-// Helper functions
 function generateHint(prompt: string): string {
   return prompt
     .split("")
     .map((char) => (char === " " ? "  " : "_"))
     .join(" ");
+}
+
+function getLetterIndices(prompt: string): number[] {
+  return prompt.split("").reduce((indices, char, i) => {
+    if (char !== " ") indices.push(i);
+    return indices;
+  }, [] as number[]);
+}
+
+function generateHintWithReveals(
+  prompt: string,
+  revealedIndices: number[],
+): string {
+  return prompt
+    .split("")
+    .map((char, i) => {
+      if (char === " ") return "  ";
+      if (revealedIndices.includes(i)) return char;
+      return "_";
+    })
+    .join(" ");
+}
+
+function revealRandomLetter(
+  prompt: string,
+  revealedIndices: number[],
+): number[] {
+  const allLetterIndices = getLetterIndices(prompt);
+  const unrevealedIndices = allLetterIndices.filter(
+    (i) => !revealedIndices.includes(i),
+  );
+
+  if (unrevealedIndices.length === 0) return revealedIndices;
+
+  const randomIndex =
+    unrevealedIndices[Math.floor(Math.random() * unrevealedIndices.length)];
+  return [...revealedIndices, randomIndex];
 }
 
 function normalizeGuess(text: string): string {
@@ -102,17 +138,15 @@ async function svgToPngDataUrl(svgString: string): Promise<string> {
 }
 
 const TOTAL_ROUNDS = 2;
-const TURN_DURATION = 120; // seconds
+const TURN_DURATION = 50; // seconds
 
 export default function HumanPlayPage() {
-  // Select 4 random vision models on mount
   const visionModels = useMemo(() => getVisionModels(), []);
   const selectedModels = useMemo(
     () => shuffleModels(visionModels, 4),
     [visionModels],
   );
 
-  // Create players array: human first, then AI models
   const players: Player[] = useMemo(
     () => [
       { id: "human", name: "You", color: "hsl(var(--primary))", isHuman: true },
@@ -132,6 +166,7 @@ export default function HumanPlayPage() {
     currentTurnIndex: 0,
     secretPrompt: "",
     hint: "",
+    revealedIndices: [],
     timeRemaining: TURN_DURATION,
     winner: null,
     aiSvg: null,
@@ -146,7 +181,6 @@ export default function HumanPlayPage() {
   const currentDrawer = players[gameState.currentTurnIndex];
   const isHumanTurn = currentDrawer?.isHuman ?? false;
 
-  // Auto-scroll chat to bottom
   useEffect(() => {
     if (chatContainerRef.current) {
       chatContainerRef.current.scrollTop =
@@ -160,23 +194,17 @@ export default function HumanPlayPage() {
     return `${mins}:${secs.toString().padStart(2, "0")}`;
   };
 
-  // End turn with optional winner
-  const endTurn = useCallback(
-    (winner: Player | null) => {
-      setGameState((prev) => ({
-        ...prev,
-        status: "turn-ended",
-        winner,
-      }));
+  const endTurn = useCallback((winner: Player | null) => {
+    setGameState((prev) => ({
+      ...prev,
+      status: "turn-ended",
+      winner,
+    }));
 
-      // Auto-advance after 2 seconds
-      setTimeout(() => {
-        advanceToNextTurn();
-      }, 2500);
-    },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [],
-  );
+    setTimeout(() => {
+      advanceToNextTurn();
+    }, 2500);
+  }, []);
 
   // Advance to next turn
   const advanceToNextTurn = useCallback(() => {
@@ -184,11 +212,9 @@ export default function HumanPlayPage() {
       const nextTurnIndex = prev.currentTurnIndex + 1;
       const totalPlayers = players.length;
 
-      // Check if round is complete
       if (nextTurnIndex >= totalPlayers) {
         const nextRound = prev.currentRound + 1;
 
-        // Check if game is over
         if (nextRound > TOTAL_ROUNDS) {
           return {
             ...prev,
@@ -197,7 +223,6 @@ export default function HumanPlayPage() {
           };
         }
 
-        // Start new round
         const newPrompt = getRandomPrompt();
         return {
           status: "idle",
@@ -205,13 +230,13 @@ export default function HumanPlayPage() {
           currentTurnIndex: 0,
           secretPrompt: newPrompt,
           hint: generateHint(newPrompt),
+          revealedIndices: [],
           timeRemaining: TURN_DURATION,
           winner: null,
           aiSvg: null,
         };
       }
 
-      // Continue to next player in same round
       const newPrompt = getRandomPrompt();
       return {
         status: "idle",
@@ -219,6 +244,7 @@ export default function HumanPlayPage() {
         currentTurnIndex: nextTurnIndex,
         secretPrompt: newPrompt,
         hint: generateHint(newPrompt),
+        revealedIndices: [],
         timeRemaining: TURN_DURATION,
         winner: null,
         aiSvg: null,
@@ -230,14 +256,12 @@ export default function HumanPlayPage() {
     setHumanGuess("");
   }, [players.length]);
 
-  // Trigger AI guesses
   const triggerAiGuess = useCallback(
     async (imageDataUrl: string) => {
       if (!imageDataUrl || isGuessing) return;
 
       setIsGuessing(true);
 
-      // Determine which models should guess (all except current drawer)
       const guessingModels = selectedModels.filter(
         (m) => m.id !== currentDrawer?.id,
       );
@@ -330,7 +354,6 @@ export default function HumanPlayPage() {
     ],
   );
 
-  // Generate AI drawing
   const generateAiDrawing = useCallback(async () => {
     if (!currentDrawer || currentDrawer.isHuman) return;
 
@@ -385,12 +408,11 @@ export default function HumanPlayPage() {
       }
     } catch (error) {
       console.error("Error generating AI drawing:", error);
-      // Skip to next turn on error
+
       endTurn(null);
     }
   }, [currentDrawer, gameState.secretPrompt, endTurn]);
 
-  // Timer effect
   useEffect(() => {
     if (gameState.status !== "playing") return;
 
@@ -406,14 +428,32 @@ export default function HumanPlayPage() {
           };
         }
 
-        // Trigger AI guess every 10 seconds
+        const elapsedTime = TURN_DURATION - newTime;
+
+        // cada 30' aparece una nueva letra
+        const shouldReveal =
+          !isHumanTurn && elapsedTime > 0 && elapsedTime % 30 === 0;
+
+        let newRevealedIndices = prev.revealedIndices;
+        let newHint = prev.hint;
+
+        if (shouldReveal) {
+          newRevealedIndices = revealRandomLetter(
+            prev.secretPrompt,
+            prev.revealedIndices,
+          );
+          newHint = generateHintWithReveals(
+            prev.secretPrompt,
+            newRevealedIndices,
+          );
+        }
+
         const shouldGuess =
           newTime % 10 === 0 && newTime > 0 && newTime < TURN_DURATION;
         if (shouldGuess) {
           if (isHumanTurn && drawingDataUrl) {
             setTimeout(() => triggerAiGuess(drawingDataUrl), 0);
           } else if (!isHumanTurn && prev.aiSvg) {
-            // Convert SVG to PNG and trigger guess
             svgToPngDataUrl(prev.aiSvg)
               .then((pngDataUrl) => {
                 triggerAiGuess(pngDataUrl);
@@ -425,6 +465,8 @@ export default function HumanPlayPage() {
         return {
           ...prev,
           timeRemaining: newTime,
+          revealedIndices: newRevealedIndices,
+          hint: newHint,
         };
       });
     }, 1000);
@@ -445,6 +487,7 @@ export default function HumanPlayPage() {
         status: "playing",
         secretPrompt: newPrompt,
         hint: generateHint(newPrompt),
+        revealedIndices: [],
         timeRemaining: TURN_DURATION,
         winner: null,
         aiSvg: null,
@@ -454,11 +497,12 @@ export default function HumanPlayPage() {
         ...prev,
         secretPrompt: newPrompt,
         hint: generateHint(newPrompt),
+        revealedIndices: [],
         timeRemaining: TURN_DURATION,
         winner: null,
         aiSvg: null,
       }));
-      // Generate AI drawing (this will set status to "generating" then "playing")
+
       setTimeout(() => generateAiDrawing(), 100);
     }
   };
@@ -471,6 +515,7 @@ export default function HumanPlayPage() {
       currentTurnIndex: 0,
       secretPrompt: "",
       hint: "",
+      revealedIndices: [],
       timeRemaining: TURN_DURATION,
       winner: null,
       aiSvg: null,
@@ -480,7 +525,6 @@ export default function HumanPlayPage() {
     setHumanGuess("");
   };
 
-  // Handle human guess submission
   const submitHumanGuess = () => {
     if (!humanGuess.trim() || isHumanTurn) return;
 
@@ -509,7 +553,6 @@ export default function HumanPlayPage() {
 
   return (
     <div className="flex flex-col lg:flex-row gap-6 h-[calc(100vh-12rem)]">
-      {/* Left Column - Players */}
       <Card className="w-full lg:w-56 shrink-0 h-fit">
         <CardContent className="p-4 space-y-3">
           <div className="flex items-center justify-between">
@@ -579,10 +622,8 @@ export default function HumanPlayPage() {
         </CardContent>
       </Card>
 
-      {/* Middle Column - Game Area */}
       <Card className="flex-1 min-w-0 h-fit">
         <CardContent className="p-6 flex flex-col items-center gap-6">
-          {/* Timer, Hint, and Controls */}
           <div className="flex items-center gap-4 flex-wrap justify-center">
             <Badge
               variant={
@@ -609,7 +650,30 @@ export default function HumanPlayPage() {
                     </span>
                   ) : (
                     <span className="text-lg font-mono tracking-widest">
-                      {gameState.hint}
+                      {gameState.secretPrompt.split("").map((char, i) => {
+                        if (char === " ") {
+                          return (
+                            <span key={i} className="mx-1">
+                              {" "}
+                            </span>
+                          );
+                        }
+                        const isRevealed =
+                          gameState.revealedIndices.includes(i);
+                        return (
+                          <span
+                            key={i}
+                            className={cn(
+                              "mx-0.5",
+                              isRevealed
+                                ? "text-primary font-bold"
+                                : "text-muted-foreground",
+                            )}
+                          >
+                            {isRevealed ? char : "_"}
+                          </span>
+                        );
+                      })}
                     </span>
                   )}
                 </div>
@@ -632,7 +696,6 @@ export default function HumanPlayPage() {
             )}
           </div>
 
-          {/* Drawing Area */}
           {gameState.status === "generating" ? (
             <div className="w-full max-w-md aspect-square flex items-center justify-center bg-muted/30 rounded-lg border-2 border-dashed">
               <div className="text-center space-y-2">
@@ -662,7 +725,6 @@ export default function HumanPlayPage() {
             </div>
           )}
 
-          {/* Turn Result Overlay */}
           {gameState.status === "turn-ended" && (
             <div className="text-center space-y-2">
               {gameState.winner ? (
@@ -693,7 +755,6 @@ export default function HumanPlayPage() {
             </div>
           )}
 
-          {/* Game Over */}
           {gameState.status === "game-over" && (
             <div className="text-center space-y-4">
               <Badge variant="default" className="text-xl px-6 py-3">
@@ -706,7 +767,6 @@ export default function HumanPlayPage() {
             </div>
           )}
 
-          {/* Instructions */}
           {gameState.status === "idle" &&
             gameState.currentRound === 1 &&
             gameState.currentTurnIndex === 0 && (
@@ -781,7 +841,6 @@ export default function HumanPlayPage() {
             )}
           </div>
 
-          {/* Human Guess Input - only show when AI is drawing */}
           {!isHumanTurn && gameState.status === "playing" && (
             <div className="mt-4 flex gap-2 shrink-0">
               <Input
