@@ -789,7 +789,7 @@ export default function ModelGuessPage() {
                 <RotateCcw className="size-4" />
                 Reset
               </Button>
-              <Button size="lg" onClick={playAgain}>
+              <Button size="lg" onClick={playAgain} className="px-8">
                 <Play className="size-4" />
                 Play Again
               </Button>
