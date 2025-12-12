@@ -1,3 +1,5 @@
+"use client";
+
 import { useCallback, useRef } from "react";
 
 export function useSound(soundPath: string, volume = 0.3) {
