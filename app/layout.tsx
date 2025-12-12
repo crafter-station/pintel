@@ -8,10 +8,28 @@ import { SiteHeader } from "@/components/site-header";
 import { diagonalGridPattern } from "@/lib/grid-patterns";
 import "./globals.css";
 
+const siteUrl = process.env.VERCEL_PROJECT_PRODUCTION_URL
+	? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
+	: "http://localhost:3000";
+
 export const metadata: Metadata = {
+	metadataBase: new URL(siteUrl),
 	title: "pintel — draw • guess • evaluate",
 	description:
 		"A multimodal AI evaluation game where humans and models draw, guess, and evaluate each other.",
+	openGraph: {
+		title: "pintel — draw • guess • evaluate",
+		description:
+			"A multimodal AI evaluation game where humans and models draw, guess, and evaluate each other.",
+		images: ["/pintel_og.png"],
+	},
+	twitter: {
+		card: "summary_large_image",
+		title: "pintel — draw • guess • evaluate",
+		description:
+			"A multimodal AI evaluation game where humans and models draw, guess, and evaluate each other.",
+		images: ["/pintel_og.png"],
+	},
 };
 
 function MainContent({ children }: { children: React.ReactNode }) {
