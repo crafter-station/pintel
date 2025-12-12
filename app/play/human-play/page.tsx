@@ -686,7 +686,7 @@ export default function HumanPlayPage() {
 
             {gameState.status === "idle" && (
               <Button size="lg" onClick={startTurn}>
-                <Play className="size-4 mr-2" />
+                <Play className="size-4" />
                 {gameState.currentTurnIndex === 0 &&
                 gameState.currentRound === 1
                   ? "Start Game"
@@ -761,12 +761,12 @@ export default function HumanPlayPage() {
           )}
 
           {gameState.status === "game-over" && (
-            <div className="text-center space-y-4">
+            <div className="text-center space-y-6">
               <Badge variant="default" className="text-xl px-6 py-3">
                 Game Over!
               </Badge>
-              <Button size="lg" onClick={startGame}>
-                <RotateCcw className="size-4 mr-2" />
+              <Button size="lg" onClick={startGame} className="px-8">
+                <Play className="size-4" />
                 Play Again
               </Button>
             </div>
