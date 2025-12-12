@@ -246,9 +246,9 @@ export function DrawingCanvas({
 			</div>
 
 			{/* Tools */}
-			<div className="flex items-center justify-between gap-4">
+			<div className="flex items-center justify-between gap-4 min-w-0">
 				{/* Colors */}
-				<div className="flex gap-1">
+				<div className="flex gap-1 flex-wrap min-w-0 flex-1">
 					{COLORS.map((c) => (
 						<button
 							type="button"
@@ -258,7 +258,7 @@ export function DrawingCanvas({
 								setTool("pen");
 							}}
 							className={cn(
-								"size-7 rounded-full border-2 transition-all hover:scale-110",
+								"size-7 rounded-full border-2 transition-all hover:scale-110 shrink-0",
 								color === c && tool === "pen"
 									? "border-primary ring-2 ring-primary ring-offset-2"
 									: "border-border",
@@ -269,7 +269,7 @@ export function DrawingCanvas({
 				</div>
 
 				{/* Actions */}
-				<div className="flex items-center gap-1">
+				<div className="flex items-center gap-1 shrink-0">
 					<Button
 						variant={tool === "pen" ? "default" : "outline"}
 						size="icon"
