@@ -17,7 +17,11 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
-import { getVisionModels, shuffleModels } from "@/lib/models";
+import {
+  getVisionModels,
+  shuffleModels,
+  type ModelConfig,
+} from "@/lib/models";
 import { getRandomPrompt } from "@/lib/prompts";
 import { cn } from "@/lib/utils";
 
@@ -142,10 +146,11 @@ const TURN_DURATION = 50; // seconds
 
 export default function HumanPlayPage() {
   const visionModels = useMemo(() => getVisionModels(), []);
-  const selectedModels = useMemo(
-    () => shuffleModels(visionModels, 4),
-    [visionModels],
-  );
+  const [selectedModels, setSelectedModels] = useState<ModelConfig[]>([]);
+
+  useEffect(() => {
+    setSelectedModels(shuffleModels(visionModels, 4));
+  }, [visionModels]);
 
   const players: Player[] = useMemo(
     () => [
