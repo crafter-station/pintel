@@ -1124,7 +1124,8 @@ export const DEFAULT_MODELS = [
 	"xai/grok-3-mini",
 ];
 
-// Vision-capable models for Model Guess mode
+// Vision-capable models for drawing and guessing
+// Note: meta/llama models excluded - they don't support tool use in streaming mode
 export const VISION_MODELS = [
 	"openai/gpt-4o",
 	"openai/gpt-4o-mini",
@@ -1140,8 +1141,6 @@ export const VISION_MODELS = [
 	"google/gemini-2.5-flash",
 	"google/gemini-2.0-flash",
 	"xai/grok-2-vision",
-	"meta/llama-3.2-90b",
-	"meta/llama-3.2-11b",
 ];
 
 export const DEFAULT_VISION_MODELS = [
