@@ -157,9 +157,9 @@
 }
 
 :root {
-  --edge: color-mix(in oklab, var(--border) 64%, var(--background));
+  --edge: color-mix(in oklab, var(--border) 98%, var(--background));
 }
 
 .dark {
-  --edge: color-mix(in oklab, var(--border) 64%, var(--background));
+  --edge: color-mix(in oklab, var(--border) 96%, var(--background));
 }
