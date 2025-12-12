@@ -591,8 +591,8 @@ export default function HumanPlayPage() {
   };
 
   return (
-    <div className="flex flex-col lg:flex-row gap-6 h-[calc(100vh-12rem)]">
-      <Card className="w-full lg:w-56 shrink-0 h-fit">
+    <div className="flex flex-col lg:flex-row gap-4 lg:gap-6 min-h-0">
+      <Card className="w-full lg:w-56 shrink-0">
         <CardContent className="p-4 space-y-3">
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
@@ -661,8 +661,8 @@ export default function HumanPlayPage() {
         </CardContent>
       </Card>
 
-      <Card className="flex-1 min-w-0 h-fit">
-        <CardContent className="p-6 flex flex-col items-center gap-6">
+      <Card className="flex-1 min-w-0">
+        <CardContent className="p-4 sm:p-6 flex flex-col items-center gap-4 sm:gap-6">
           <div className="flex items-center gap-4 flex-wrap justify-center">
             <Badge
               variant={
@@ -844,8 +844,8 @@ export default function HumanPlayPage() {
       </Card>
 
       {/* Right Column - Chat */}
-      <Card className="w-full lg:w-80 shrink-0 lg:h-full lg:max-h-[calc(100vh-12rem)] flex flex-col">
-        <CardContent className="flex-1 flex flex-col p-4 overflow-hidden">
+      <Card className="w-full lg:w-80 shrink-0 max-h-[50vh] lg:max-h-[calc(100dvh-14rem)] flex flex-col">
+        <CardContent className="flex-1 flex flex-col p-3 sm:p-4 overflow-hidden min-h-0">
           <div className="flex items-center gap-2 mb-4 shrink-0">
             <MessageCircle className="size-4 text-muted-foreground" />
             <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">

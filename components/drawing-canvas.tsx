@@ -227,7 +227,7 @@ export function DrawingCanvas({
 	}, []);
 
 	return (
-		<div className={cn("flex flex-col gap-4", className)}>
+		<div className={cn("flex flex-col gap-3 sm:gap-4", className)}>
 			{/* Canvas */}
 			<div className="relative rounded-xl overflow-hidden border-2 border-border bg-white shadow-lg">
 				<canvas
@@ -245,10 +245,10 @@ export function DrawingCanvas({
 				/>
 			</div>
 
-			{/* Tools */}
-			<div className="flex items-center justify-between gap-4 min-w-0">
+			{/* Tools - Responsive layout */}
+			<div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4 min-w-0">
 				{/* Colors */}
-				<div className="flex gap-1 flex-wrap min-w-0 flex-1">
+				<div className="flex gap-1 flex-wrap min-w-0 justify-center sm:justify-start">
 					{COLORS.map((c) => (
 						<button
 							type="button"
@@ -258,9 +258,9 @@ export function DrawingCanvas({
 								setTool("pen");
 							}}
 							className={cn(
-								"size-7 rounded-full border-2 transition-all hover:scale-110 shrink-0",
+								"size-6 sm:size-7 rounded-full border-2 transition-all hover:scale-110 shrink-0",
 								color === c && tool === "pen"
-									? "border-primary ring-2 ring-primary ring-offset-2"
+									? "border-primary ring-2 ring-primary ring-offset-1 sm:ring-offset-2"
 									: "border-border",
 							)}
 							style={{ backgroundColor: c }}
@@ -269,10 +269,11 @@ export function DrawingCanvas({
 				</div>
 
 				{/* Actions */}
-				<div className="flex items-center gap-1 shrink-0">
+				<div className="flex items-center justify-center sm:justify-end gap-1 shrink-0">
 					<Button
 						variant={tool === "pen" ? "default" : "outline"}
 						size="icon"
+						className="size-8 sm:size-9"
 						onClick={() => setTool("pen")}
 					>
 						<Pencil className="size-4" />
@@ -280,14 +281,16 @@ export function DrawingCanvas({
 					<Button
 						variant={tool === "eraser" ? "default" : "outline"}
 						size="icon"
+						className="size-8 sm:size-9"
 						onClick={() => setTool("eraser")}
 					>
 						<Eraser className="size-4" />
 					</Button>
-					<div className="w-px h-6 bg-border mx-1" />
+					<div className="w-px h-5 sm:h-6 bg-border mx-1" />
 					<Button
 						variant="outline"
 						size="icon"
+						className="size-8 sm:size-9"
 						onClick={undo}
 						disabled={historyIndex <= 0}
 					>
@@ -296,21 +299,27 @@ export function DrawingCanvas({
 					<Button
 						variant="outline"
 						size="icon"
+						className="size-8 sm:size-9"
 						onClick={redo}
 						disabled={historyIndex >= history.length - 1}
 					>
 						<Redo2 className="size-4" />
 					</Button>
-					<div className="w-px h-6 bg-border mx-1" />
-					<Button variant="outline" size="icon" onClick={clear}>
+					<div className="w-px h-5 sm:h-6 bg-border mx-1" />
+					<Button
+						variant="outline"
+						size="icon"
+						className="size-8 sm:size-9"
+						onClick={clear}
+					>
 						<Trash2 className="size-4" />
 					</Button>
 				</div>
 			</div>
 
 			{/* Brush Size */}
-			<div className="flex items-center gap-4">
-				<span className="text-sm text-muted-foreground w-16">
+			<div className="flex items-center gap-3 sm:gap-4">
+				<span className="text-xs sm:text-sm text-muted-foreground w-14 sm:w-16 shrink-0">
 					Brush: {brushSize}px
 				</span>
 				<Slider

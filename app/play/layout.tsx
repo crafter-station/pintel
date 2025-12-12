@@ -6,8 +6,8 @@ export default function PlayLayout({
 	children: React.ReactNode;
 }) {
 	return (
-		<main className="min-h-screen p-6 md:p-8">
-			<div className="max-w-6xl mx-auto space-y-6">
+		<main className="min-h-[100dvh] p-3 sm:p-4 md:p-6 lg:p-8">
+			<div className="max-w-6xl mx-auto space-y-4 md:space-y-6">
 				<GameTabsNav />
 				{children}
 			</div>
