@@ -14,12 +14,14 @@ import {
   User,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { toast } from "sonner";
 import { DrawingCanvas } from "@/components/drawing-canvas";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
+import { useIsMobile } from "@/hooks/use-mobile";
 import {
   getVisionModels,
   shuffleModels,
@@ -168,6 +170,7 @@ const TOTAL_ROUNDS = 2;
 const TURN_DURATION = 50; // seconds
 
 export default function HumanPlayPage() {
+  const isMobile = useIsMobile();
   const visionModels = useMemo(() => getVisionModels(), []);
   const [selectedModels, setSelectedModels] = useState<ModelConfig[]>([]);
 
@@ -347,6 +350,31 @@ export default function HumanPlayPage() {
 
                       setChatMessages((prev) => [...prev, newMessage]);
 
+                      // Show toast on mobile when user is drawing
+                      if (isMobile && isHumanTurn) {
+                        toast(
+                          <div className="flex items-center gap-2 text-xs">
+                            <div
+                              className="size-2 rounded-full shrink-0"
+                              style={{ backgroundColor: model.color }}
+                            />
+                            <span className="font-medium truncate">
+                              {model.name}:
+                            </span>
+                            <span className="truncate text-muted-foreground">
+                              "{event.guess}"
+                            </span>
+                            {isCorrect && (
+                              <Check className="size-3 text-green-500 shrink-0" />
+                            )}
+                          </div>,
+                          {
+                            duration: 2000,
+                            className: "py-2 px-3",
+                          },
+                        );
+                      }
+
                       if (isCorrect) {
                         const winnerPlayer = players.find(
                           (p) => p.id === event.modelId,
@@ -377,6 +405,8 @@ export default function HumanPlayPage() {
       isGuessing,
       players,
       endTurn,
+      isMobile,
+      isHumanTurn,
     ],
   );
 

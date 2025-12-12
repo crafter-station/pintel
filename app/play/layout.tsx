@@ -1,4 +1,5 @@
 import { GameTabsNav } from "@/components/game-tabs-nav";
+import { Toaster } from "@/components/ui/sonner";
 
 export default function PlayLayout({
 	children,
@@ -11,6 +12,7 @@ export default function PlayLayout({
 				<GameTabsNav />
 				{children}
 			</div>
+			<Toaster position="top-center" />
 		</main>
 	);
 }
