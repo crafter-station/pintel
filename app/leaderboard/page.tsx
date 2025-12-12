@@ -5,8 +5,13 @@ import {
 	ArrowLeft,
 	ArrowUp,
 	ArrowUpDown,
+	Bot,
+	Eye,
+	Palette,
+	Target,
 	TrendingUp,
 	Trophy,
+	User,
 } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
@@ -21,53 +26,60 @@ import {
 	TableHeader,
 	TableRow,
 } from "@/components/ui/table";
-import { useLeaderboard } from "@/lib/hooks/use-leaderboard";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+	type LeaderboardEntry,
+	type LeaderboardType,
+	useLeaderboard,
+} from "@/lib/hooks/use-leaderboard";
 import { AVAILABLE_MODELS, formatCost, getModelById } from "@/lib/models";
 import { cn } from "@/lib/utils";
 
 type SortField =
 	| "overallScore"
-	| "humanJudgeWinRate"
-	| "modelGuessAccuracy"
-	| "aiDuelPoints"
+	| "drawingScore"
+	| "guessingScore"
 	| "totalCost"
-	| "totalTokens";
+	| "roundsPlayed";
 
 export default function LeaderboardPage() {
-	const { data, isLoading, error } = useLeaderboard();
+	const [leaderboardType, setLeaderboardType] =
+		useState<LeaderboardType>("combined");
+	const { data, isLoading, error } = useLeaderboard(leaderboardType);
 	const [sortField, setSortField] = useState<SortField>("overallScore");
 	const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
 	const [providerFilter, setProviderFilter] = useState<string>("all");
-	const [tierFilter, setTierFilter] = useState<string>("all");
 
 	const providers = useMemo(() => {
 		const uniqueProviders = new Set(AVAILABLE_MODELS.map((m) => m.provider));
 		return Array.from(uniqueProviders);
 	}, []);
 
-	const sortedModels = useMemo(() => {
-		if (!data?.models) return [];
+	const sortedEntries = useMemo(() => {
+		if (!data?.entries) return [];
 
-		const filtered = data.models.filter((m) => {
-			const model = getModelById(m.modelId);
-			if (!model) return false;
-			const matchesProvider =
-				providerFilter === "all" || model.provider === providerFilter;
-			const matchesTier = tierFilter === "all" || model.tier === tierFilter;
-			return matchesProvider && matchesTier;
+		let filtered = data.entries;
+
+		if (leaderboardType === "llm" && providerFilter !== "all") {
+			filtered = filtered.filter((entry) => {
+				if (entry.type !== "llm" || !entry.modelId) return false;
+				const model = getModelById(entry.modelId);
+				return model?.provider === providerFilter;
+			});
+		}
+
+		return [...filtered].sort((a, b) => {
+			const aValue = a[sortField] ?? 0;
+			const bValue = b[sortField] ?? 0;
+			return sortDirection === "asc" ? aValue - bValue : bValue - aValue;
 		});
-
-		filtered.sort((a, b) => {
-			const aValue = a[sortField];
-			const bValue = b[sortField];
-			if (sortDirection === "asc") {
-				return aValue - bValue;
-			}
-			return bValue - aValue;
-		});
-
-		return filtered;
-	}, [data?.models, sortField, sortDirection, providerFilter, tierFilter]);
+	}, [
+		data?.entries,
+		sortField,
+		sortDirection,
+		providerFilter,
+		leaderboardType,
+	]);
 
 	const handleSort = (field: SortField) => {
 		if (sortField === field) {
@@ -102,11 +114,31 @@ export default function LeaderboardPage() {
 					<div className="text-center">
 						<h1 className="text-3xl font-mono font-light">Leaderboard</h1>
 						<p className="text-sm text-muted-foreground">
-							Model performance rankings
+							Top performers in AI Pictionary
 						</p>
 					</div>
 					<div className="w-20" />
 				</header>
+
+				<Tabs
+					value={leaderboardType}
+					onValueChange={(v) => setLeaderboardType(v as LeaderboardType)}
+				>
+					<TabsList className="grid w-full max-w-md mx-auto grid-cols-3">
+						<TabsTrigger value="combined" className="gap-2">
+							<Trophy className="size-4" />
+							All
+						</TabsTrigger>
+						<TabsTrigger value="llm" className="gap-2">
+							<Bot className="size-4" />
+							AI Models
+						</TabsTrigger>
+						<TabsTrigger value="human" className="gap-2">
+							<User className="size-4" />
+							Players
+						</TabsTrigger>
+					</TabsList>
+				</Tabs>
 
 				{isLoading && (
 					<Card>
@@ -131,37 +163,27 @@ export default function LeaderboardPage() {
 				{data && (
 					<>
 						<div className="flex items-center gap-4 flex-wrap">
-							<div className="flex items-center gap-2">
-								<span className="text-sm text-muted-foreground">Provider:</span>
-								<select
-									value={providerFilter}
-									onChange={(e) => setProviderFilter(e.target.value)}
-									className="px-3 py-1.5 rounded-md border bg-background text-sm"
-								>
-									<option value="all">All</option>
-									{providers.map((p) => (
-										<option key={p} value={p}>
-											{p}
-										</option>
-									))}
-								</select>
-							</div>
-							<div className="flex items-center gap-2">
-								<span className="text-sm text-muted-foreground">Tier:</span>
-								<select
-									value={tierFilter}
-									onChange={(e) => setTierFilter(e.target.value)}
-									className="px-3 py-1.5 rounded-md border bg-background text-sm"
-								>
-									<option value="all">All</option>
-									<option value="budget">Budget</option>
-									<option value="mid">Mid</option>
-									<option value="premium">Premium</option>
-									<option value="flagship">Flagship</option>
-								</select>
-							</div>
+							{leaderboardType === "llm" && (
+								<div className="flex items-center gap-2">
+									<span className="text-sm text-muted-foreground">
+										Provider:
+									</span>
+									<select
+										value={providerFilter}
+										onChange={(e) => setProviderFilter(e.target.value)}
+										className="px-3 py-1.5 rounded-md border bg-background text-sm"
+									>
+										<option value="all">All</option>
+										{providers.map((p) => (
+											<option key={p} value={p}>
+												{p}
+											</option>
+										))}
+									</select>
+								</div>
+							)}
 							<div className="ml-auto text-sm text-muted-foreground">
-								{data.totalSessions} total sessions
+								{data.totalSessions} total games played
 							</div>
 						</div>
 
@@ -171,188 +193,84 @@ export default function LeaderboardPage() {
 									<TableHeader>
 										<TableRow>
 											<TableHead className="w-12">Rank</TableHead>
-											<TableHead>Model</TableHead>
+											<TableHead>
+												{leaderboardType === "human" ? "Player" : "Competitor"}
+											</TableHead>
 											<TableHead
 												className="cursor-pointer hover:bg-muted/50"
 												onClick={() => handleSort("overallScore")}
 											>
 												<div className="flex items-center">
-													Overall Score
+													<Target className="size-4 mr-1 text-yellow-500" />
+													Score
 													<SortIcon field="overallScore" />
 												</div>
 											</TableHead>
 											<TableHead
 												className="cursor-pointer hover:bg-muted/50"
-												onClick={() => handleSort("humanJudgeWinRate")}
+												onClick={() => handleSort("drawingScore")}
 											>
 												<div className="flex items-center">
-													Human Judge Win Rate
-													<SortIcon field="humanJudgeWinRate" />
+													<Palette className="size-4 mr-1 text-blue-500" />
+													Drawing
+													<SortIcon field="drawingScore" />
 												</div>
 											</TableHead>
 											<TableHead
 												className="cursor-pointer hover:bg-muted/50"
-												onClick={() => handleSort("modelGuessAccuracy")}
+												onClick={() => handleSort("guessingScore")}
 											>
 												<div className="flex items-center">
-													Model Guess Accuracy
-													<SortIcon field="modelGuessAccuracy" />
+													<Eye className="size-4 mr-1 text-purple-500" />
+													Guessing
+													<SortIcon field="guessingScore" />
 												</div>
 											</TableHead>
 											<TableHead
 												className="cursor-pointer hover:bg-muted/50"
-												onClick={() => handleSort("aiDuelPoints")}
+												onClick={() => handleSort("roundsPlayed")}
 											>
 												<div className="flex items-center">
-													AI Duel Points
-													<SortIcon field="aiDuelPoints" />
+													Rounds
+													<SortIcon field="roundsPlayed" />
 												</div>
 											</TableHead>
-											<TableHead
-												className="cursor-pointer hover:bg-muted/50"
-												onClick={() => handleSort("totalCost")}
-											>
-												<div className="flex items-center">
-													Total Cost
-													<SortIcon field="totalCost" />
-												</div>
-											</TableHead>
-											<TableHead
-												className="cursor-pointer hover:bg-muted/50"
-												onClick={() => handleSort("totalTokens")}
-											>
-												<div className="flex items-center">
-													Total Tokens
-													<SortIcon field="totalTokens" />
-												</div>
-											</TableHead>
+											{leaderboardType !== "human" && (
+												<TableHead
+													className="cursor-pointer hover:bg-muted/50"
+													onClick={() => handleSort("totalCost")}
+												>
+													<div className="flex items-center">
+														Cost
+														<SortIcon field="totalCost" />
+													</div>
+												</TableHead>
+											)}
 										</TableRow>
 									</TableHeader>
 									<TableBody>
-										{sortedModels.length === 0 ? (
+										{sortedEntries.length === 0 ? (
 											<TableRow>
 												<TableCell
-													colSpan={8}
+													colSpan={7}
 													className="text-center text-muted-foreground py-8"
 												>
-													No models found matching filters
+													{leaderboardType === "human"
+														? "No players yet. Be the first to play!"
+														: "No entries found"}
 												</TableCell>
 											</TableRow>
 										) : (
-											sortedModels.map((model, index) => {
-												const modelInfo = getModelById(model.modelId);
-												if (!modelInfo) return null;
-
-												const isTopThree =
-													index < 3 &&
-													sortField === "overallScore" &&
-													sortDirection === "desc";
-
-												return (
-													<TableRow
-														key={model.modelId}
-														className={cn(isTopThree && "bg-yellow-500/5")}
-													>
-														<TableCell>
-															<div className="flex items-center gap-2">
-																{isTopThree && index === 0 && (
-																	<Trophy className="size-4 text-yellow-500" />
-																)}
-																<span
-																	className={cn(
-																		"font-mono",
-																		isTopThree &&
-																			index === 0 &&
-																			"font-bold text-yellow-500",
-																	)}
-																>
-																	{index + 1}
-																</span>
-															</div>
-														</TableCell>
-														<TableCell>
-															<div className="flex items-center gap-2">
-																<div
-																	className="size-3 rounded-full"
-																	style={{ backgroundColor: modelInfo.color }}
-																/>
-																<div>
-																	<div className="font-medium">
-																		{modelInfo.name}
-																	</div>
-																	<div className="text-xs text-muted-foreground">
-																		{modelInfo.provider}
-																	</div>
-																</div>
-															</div>
-														</TableCell>
-														<TableCell>
-															<div className="flex items-center gap-2">
-																<span className="font-medium">
-																	{model.overallScore.toFixed(1)}
-																</span>
-																{isTopThree && index === 0 && (
-																	<TrendingUp className="size-4 text-yellow-500" />
-																)}
-															</div>
-														</TableCell>
-														<TableCell>
-															{model.humanJudgePlays > 0 ? (
-																<div>
-																	<div className="font-medium">
-																		{model.humanJudgeWinRate.toFixed(1)}%
-																	</div>
-																	<div className="text-xs text-muted-foreground">
-																		{model.humanJudgeWins}/
-																		{model.humanJudgePlays} wins
-																	</div>
-																</div>
-															) : (
-																<span className="text-muted-foreground">—</span>
-															)}
-														</TableCell>
-														<TableCell>
-															{model.modelGuessTotal > 0 ? (
-																<div>
-																	<div className="font-medium">
-																		{model.modelGuessAccuracy.toFixed(1)}%
-																	</div>
-																	<div className="text-xs text-muted-foreground">
-																		{model.modelGuessCorrect}/
-																		{model.modelGuessTotal} correct
-																	</div>
-																</div>
-															) : (
-																<span className="text-muted-foreground">—</span>
-															)}
-														</TableCell>
-														<TableCell>
-															{model.aiDuelRounds > 0 ? (
-																<div>
-																	<div className="font-medium">
-																		{model.aiDuelPoints}
-																	</div>
-																	<div className="text-xs text-muted-foreground">
-																		{model.aiDuelRounds} rounds
-																	</div>
-																</div>
-															) : (
-																<span className="text-muted-foreground">—</span>
-															)}
-														</TableCell>
-														<TableCell>
-															<span className="font-medium">
-																{formatCost(model.totalCost)}
-															</span>
-														</TableCell>
-														<TableCell>
-															<span className="font-mono text-sm">
-																{model.totalTokens.toLocaleString()}
-															</span>
-														</TableCell>
-													</TableRow>
-												);
-											})
+											sortedEntries.map((entry, index) => (
+												<LeaderboardRow
+													key={entry.id}
+													entry={entry}
+													index={index}
+													sortField={sortField}
+													sortDirection={sortDirection}
+													showCost={leaderboardType !== "human"}
+												/>
+											))
 										)}
 									</TableBody>
 								</Table>
@@ -362,5 +280,115 @@ export default function LeaderboardPage() {
 				)}
 			</div>
 		</main>
+	);
+}
+
+function LeaderboardRow({
+	entry,
+	index,
+	sortField,
+	sortDirection,
+	showCost,
+}: {
+	entry: LeaderboardEntry;
+	index: number;
+	sortField: SortField;
+	sortDirection: "asc" | "desc";
+	showCost: boolean;
+}) {
+	const isTopThree =
+		index < 3 && sortField === "overallScore" && sortDirection === "desc";
+
+	const modelInfo =
+		entry.type === "llm" && entry.modelId ? getModelById(entry.modelId) : null;
+	const color = modelInfo?.color || "#10b981";
+
+	return (
+		<TableRow className={cn(isTopThree && "bg-yellow-500/5")}>
+			<TableCell>
+				<div className="flex items-center gap-2">
+					{isTopThree && index === 0 && (
+						<Trophy className="size-4 text-yellow-500" />
+					)}
+					<span
+						className={cn(
+							"font-mono",
+							isTopThree && index === 0 && "font-bold text-yellow-500",
+						)}
+					>
+						{index + 1}
+					</span>
+				</div>
+			</TableCell>
+			<TableCell>
+				<div className="flex items-center gap-2">
+					<div
+						className="size-3 rounded-full"
+						style={{ backgroundColor: color }}
+					/>
+					<div>
+						<div className="font-medium flex items-center gap-1.5">
+							{entry.name}
+							{entry.type === "llm" ? (
+								<Bot className="size-3 text-muted-foreground" />
+							) : (
+								<User className="size-3 text-muted-foreground" />
+							)}
+						</div>
+						{entry.type === "llm" && modelInfo && (
+							<div className="text-xs text-muted-foreground">
+								{modelInfo.provider}
+							</div>
+						)}
+					</div>
+				</div>
+			</TableCell>
+			<TableCell>
+				<div className="flex items-center gap-2">
+					<span className="font-bold text-lg">
+						{entry.overallScore.toFixed(1)}
+					</span>
+					{isTopThree && index === 0 && (
+						<TrendingUp className="size-4 text-yellow-500" />
+					)}
+				</div>
+			</TableCell>
+			<TableCell>
+				{entry.drawingRounds > 0 ? (
+					<div>
+						<div className="font-medium text-blue-600">
+							{entry.drawingScore.toFixed(2)}
+						</div>
+						<div className="text-xs text-muted-foreground">
+							{entry.drawingRounds} rounds
+						</div>
+					</div>
+				) : (
+					<span className="text-muted-foreground">—</span>
+				)}
+			</TableCell>
+			<TableCell>
+				{entry.guessingRounds > 0 ? (
+					<div>
+						<div className="font-medium text-purple-600">
+							{entry.guessingScore.toFixed(2)}
+						</div>
+						<div className="text-xs text-muted-foreground">
+							{entry.guessingRounds} rounds
+						</div>
+					</div>
+				) : (
+					<span className="text-muted-foreground">—</span>
+				)}
+			</TableCell>
+			<TableCell>
+				<span className="font-mono">{entry.roundsPlayed}</span>
+			</TableCell>
+			{showCost && (
+				<TableCell>
+					<span className="font-medium">{formatCost(entry.totalCost)}</span>
+				</TableCell>
+			)}
+		</TableRow>
 	);
 }

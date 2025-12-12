@@ -1,0 +1,627 @@
+{
+	"id": "00000000-0000-0000-0000-000000000000",
+	"prevId": "",
+	"version": "7",
+	"dialect": "postgresql",
+	"tables": {
+		"public.model_scores": {
+			"name": "model_scores",
+			"schema": "",
+			"columns": {
+				"model_id": {
+					"name": "model_id",
+					"type": "text",
+					"primaryKey": true,
+					"notNull": true
+				},
+				"drawing_score": {
+					"name": "drawing_score",
+					"type": "real",
+					"primaryKey": false,
+					"notNull": false,
+					"default": 0
+				},
+				"guessing_score": {
+					"name": "guessing_score",
+					"type": "real",
+					"primaryKey": false,
+					"notNull": false,
+					"default": 0
+				},
+				"drawing_rounds": {
+					"name": "drawing_rounds",
+					"type": "integer",
+					"primaryKey": false,
+					"notNull": false,
+					"default": 0
+				},
+				"guessing_rounds": {
+					"name": "guessing_rounds",
+					"type": "integer",
+					"primaryKey": false,
+					"notNull": false,
+					"default": 0
+				},
+				"human_judge_wins": {
+					"name": "human_judge_wins",
+					"type": "integer",
+					"primaryKey": false,
+					"notNull": false,
+					"default": 0
+				},
+				"human_judge_plays": {
+					"name": "human_judge_plays",
+					"type": "integer",
+					"primaryKey": false,
+					"notNull": false,
+					"default": 0
+				},
+				"model_guess_correct": {
+					"name": "model_guess_correct",
+					"type": "integer",
+					"primaryKey": false,
+					"notNull": false,
+					"default": 0
+				},
+				"model_guess_total": {
+					"name": "model_guess_total",
+					"type": "integer",
+					"primaryKey": false,
+					"notNull": false,
+					"default": 0
+				},
+				"ai_duel_points": {
+					"name": "ai_duel_points",
+					"type": "integer",
+					"primaryKey": false,
+					"notNull": false,
+					"default": 0
+				},
+				"ai_duel_rounds": {
+					"name": "ai_duel_rounds",
+					"type": "integer",
+					"primaryKey": false,
+					"notNull": false,
+					"default": 0
+				},
+				"total_cost": {
+					"name": "total_cost",
+					"type": "real",
+					"primaryKey": false,
+					"notNull": false,
+					"default": 0
+				},
+				"total_tokens": {
+					"name": "total_tokens",
+					"type": "integer",
+					"primaryKey": false,
+					"notNull": false,
+					"default": 0
+				},
+				"updated_at": {
+					"name": "updated_at",
+					"type": "timestamp",
+					"primaryKey": false,
+					"notNull": false,
+					"default": "now()"
+				}
+			},
+			"indexes": {},
+			"foreignKeys": {},
+			"compositePrimaryKeys": {},
+			"uniqueConstraints": {},
+			"checkConstraints": {},
+			"policies": {},
+			"isRLSEnabled": false
+		},
+		"public.game_sessions": {
+			"name": "game_sessions",
+			"schema": "",
+			"columns": {
+				"id": {
+					"name": "id",
+					"type": "uuid",
+					"primaryKey": true,
+					"notNull": true,
+					"default": "gen_random_uuid()"
+				},
+				"mode": {
+					"name": "mode",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": true
+				},
+				"prompt": {
+					"name": "prompt",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": true
+				},
+				"total_cost": {
+					"name": "total_cost",
+					"type": "real",
+					"primaryKey": false,
+					"notNull": false,
+					"default": 0
+				},
+				"total_tokens": {
+					"name": "total_tokens",
+					"type": "integer",
+					"primaryKey": false,
+					"notNull": false,
+					"default": 0
+				},
+				"total_time_ms": {
+					"name": "total_time_ms",
+					"type": "integer",
+					"primaryKey": false,
+					"notNull": false
+				},
+				"current_round": {
+					"name": "current_round",
+					"type": "integer",
+					"primaryKey": false,
+					"notNull": false,
+					"default": 1
+				},
+				"total_rounds": {
+					"name": "total_rounds",
+					"type": "integer",
+					"primaryKey": false,
+					"notNull": false,
+					"default": 1
+				},
+				"anon_id": {
+					"name": "anon_id",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": false
+				},
+				"clerk_user_id": {
+					"name": "clerk_user_id",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": false
+				},
+				"created_at": {
+					"name": "created_at",
+					"type": "timestamp",
+					"primaryKey": false,
+					"notNull": true,
+					"default": "now()"
+				}
+			},
+			"indexes": {},
+			"foreignKeys": {},
+			"compositePrimaryKeys": {},
+			"uniqueConstraints": {},
+			"checkConstraints": {},
+			"policies": {},
+			"isRLSEnabled": false
+		},
+		"public.drawings": {
+			"name": "drawings",
+			"schema": "",
+			"columns": {
+				"id": {
+					"name": "id",
+					"type": "uuid",
+					"primaryKey": true,
+					"notNull": true,
+					"default": "gen_random_uuid()"
+				},
+				"session_id": {
+					"name": "session_id",
+					"type": "uuid",
+					"primaryKey": false,
+					"notNull": true
+				},
+				"model_id": {
+					"name": "model_id",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": true
+				},
+				"svg": {
+					"name": "svg",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": true
+				},
+				"generation_time_ms": {
+					"name": "generation_time_ms",
+					"type": "integer",
+					"primaryKey": false,
+					"notNull": false
+				},
+				"cost": {
+					"name": "cost",
+					"type": "real",
+					"primaryKey": false,
+					"notNull": false
+				},
+				"tokens": {
+					"name": "tokens",
+					"type": "integer",
+					"primaryKey": false,
+					"notNull": false
+				},
+				"is_winner": {
+					"name": "is_winner",
+					"type": "boolean",
+					"primaryKey": false,
+					"notNull": false,
+					"default": false
+				},
+				"chunks": {
+					"name": "chunks",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": false
+				}
+			},
+			"indexes": {},
+			"foreignKeys": {
+				"drawings_session_id_game_sessions_id_fk": {
+					"name": "drawings_session_id_game_sessions_id_fk",
+					"tableFrom": "drawings",
+					"tableTo": "game_sessions",
+					"schemaTo": "public",
+					"columnsFrom": ["session_id"],
+					"columnsTo": ["id"],
+					"onDelete": "cascade",
+					"onUpdate": "no action"
+				}
+			},
+			"compositePrimaryKeys": {},
+			"uniqueConstraints": {},
+			"checkConstraints": {},
+			"policies": {},
+			"isRLSEnabled": false
+		},
+		"public.guesses": {
+			"name": "guesses",
+			"schema": "",
+			"columns": {
+				"id": {
+					"name": "id",
+					"type": "uuid",
+					"primaryKey": true,
+					"notNull": true,
+					"default": "gen_random_uuid()"
+				},
+				"session_id": {
+					"name": "session_id",
+					"type": "uuid",
+					"primaryKey": false,
+					"notNull": true
+				},
+				"model_id": {
+					"name": "model_id",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": true
+				},
+				"guess": {
+					"name": "guess",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": true
+				},
+				"is_correct": {
+					"name": "is_correct",
+					"type": "boolean",
+					"primaryKey": false,
+					"notNull": false,
+					"default": false
+				},
+				"semantic_score": {
+					"name": "semantic_score",
+					"type": "real",
+					"primaryKey": false,
+					"notNull": false
+				},
+				"time_bonus": {
+					"name": "time_bonus",
+					"type": "integer",
+					"primaryKey": false,
+					"notNull": false,
+					"default": 0
+				},
+				"final_score": {
+					"name": "final_score",
+					"type": "integer",
+					"primaryKey": false,
+					"notNull": false,
+					"default": 0
+				},
+				"is_human": {
+					"name": "is_human",
+					"type": "boolean",
+					"primaryKey": false,
+					"notNull": false,
+					"default": false
+				},
+				"generation_time_ms": {
+					"name": "generation_time_ms",
+					"type": "integer",
+					"primaryKey": false,
+					"notNull": false
+				},
+				"cost": {
+					"name": "cost",
+					"type": "real",
+					"primaryKey": false,
+					"notNull": false
+				},
+				"tokens": {
+					"name": "tokens",
+					"type": "integer",
+					"primaryKey": false,
+					"notNull": false
+				},
+				"round_id": {
+					"name": "round_id",
+					"type": "uuid",
+					"primaryKey": false,
+					"notNull": false
+				}
+			},
+			"indexes": {},
+			"foreignKeys": {
+				"guesses_session_id_game_sessions_id_fk": {
+					"name": "guesses_session_id_game_sessions_id_fk",
+					"tableFrom": "guesses",
+					"tableTo": "game_sessions",
+					"schemaTo": "public",
+					"columnsFrom": ["session_id"],
+					"columnsTo": ["id"],
+					"onDelete": "cascade",
+					"onUpdate": "no action"
+				},
+				"guesses_round_id_round_results_id_fk": {
+					"name": "guesses_round_id_round_results_id_fk",
+					"tableFrom": "guesses",
+					"tableTo": "round_results",
+					"schemaTo": "public",
+					"columnsFrom": ["round_id"],
+					"columnsTo": ["id"],
+					"onDelete": "cascade",
+					"onUpdate": "no action"
+				}
+			},
+			"compositePrimaryKeys": {},
+			"uniqueConstraints": {},
+			"checkConstraints": {},
+			"policies": {},
+			"isRLSEnabled": false
+		},
+		"public.player_scores": {
+			"name": "player_scores",
+			"schema": "",
+			"columns": {
+				"id": {
+					"name": "id",
+					"type": "uuid",
+					"primaryKey": true,
+					"notNull": true,
+					"default": "gen_random_uuid()"
+				},
+				"clerk_user_id": {
+					"name": "clerk_user_id",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": false
+				},
+				"anon_id": {
+					"name": "anon_id",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": false
+				},
+				"username": {
+					"name": "username",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": false
+				},
+				"total_score": {
+					"name": "total_score",
+					"type": "integer",
+					"primaryKey": false,
+					"notNull": false,
+					"default": 0
+				},
+				"games_played": {
+					"name": "games_played",
+					"type": "integer",
+					"primaryKey": false,
+					"notNull": false,
+					"default": 0
+				},
+				"games_won": {
+					"name": "games_won",
+					"type": "integer",
+					"primaryKey": false,
+					"notNull": false,
+					"default": 0
+				},
+				"rounds_played": {
+					"name": "rounds_played",
+					"type": "integer",
+					"primaryKey": false,
+					"notNull": false,
+					"default": 0
+				},
+				"drawing_rounds": {
+					"name": "drawing_rounds",
+					"type": "integer",
+					"primaryKey": false,
+					"notNull": false,
+					"default": 0
+				},
+				"guessing_rounds": {
+					"name": "guessing_rounds",
+					"type": "integer",
+					"primaryKey": false,
+					"notNull": false,
+					"default": 0
+				},
+				"drawing_score": {
+					"name": "drawing_score",
+					"type": "real",
+					"primaryKey": false,
+					"notNull": false,
+					"default": 0
+				},
+				"guessing_score": {
+					"name": "guessing_score",
+					"type": "real",
+					"primaryKey": false,
+					"notNull": false,
+					"default": 0
+				},
+				"best_round_score": {
+					"name": "best_round_score",
+					"type": "integer",
+					"primaryKey": false,
+					"notNull": false,
+					"default": 0
+				},
+				"created_at": {
+					"name": "created_at",
+					"type": "timestamp",
+					"primaryKey": false,
+					"notNull": true,
+					"default": "now()"
+				},
+				"updated_at": {
+					"name": "updated_at",
+					"type": "timestamp",
+					"primaryKey": false,
+					"notNull": false,
+					"default": "now()"
+				}
+			},
+			"indexes": {},
+			"foreignKeys": {},
+			"compositePrimaryKeys": {},
+			"uniqueConstraints": {
+				"player_scores_clerk_user_id_unique": {
+					"columns": ["clerk_user_id"],
+					"nullsNotDistinct": false,
+					"name": "player_scores_clerk_user_id_unique"
+				},
+				"player_scores_anon_id_unique": {
+					"columns": ["anon_id"],
+					"nullsNotDistinct": false,
+					"name": "player_scores_anon_id_unique"
+				}
+			},
+			"checkConstraints": {},
+			"policies": {},
+			"isRLSEnabled": false
+		},
+		"public.round_results": {
+			"name": "round_results",
+			"schema": "",
+			"columns": {
+				"id": {
+					"name": "id",
+					"type": "uuid",
+					"primaryKey": true,
+					"notNull": true,
+					"default": "gen_random_uuid()"
+				},
+				"session_id": {
+					"name": "session_id",
+					"type": "uuid",
+					"primaryKey": false,
+					"notNull": true
+				},
+				"round_number": {
+					"name": "round_number",
+					"type": "integer",
+					"primaryKey": false,
+					"notNull": true
+				},
+				"drawer_id": {
+					"name": "drawer_id",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": true
+				},
+				"drawer_type": {
+					"name": "drawer_type",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": true
+				},
+				"prompt": {
+					"name": "prompt",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": true
+				},
+				"max_possible_score": {
+					"name": "max_possible_score",
+					"type": "integer",
+					"primaryKey": false,
+					"notNull": true
+				},
+				"top_score": {
+					"name": "top_score",
+					"type": "integer",
+					"primaryKey": false,
+					"notNull": false,
+					"default": 0
+				},
+				"svg": {
+					"name": "svg",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": false
+				},
+				"created_at": {
+					"name": "created_at",
+					"type": "timestamp",
+					"primaryKey": false,
+					"notNull": true,
+					"default": "now()"
+				}
+			},
+			"indexes": {},
+			"foreignKeys": {
+				"round_results_session_id_game_sessions_id_fk": {
+					"name": "round_results_session_id_game_sessions_id_fk",
+					"tableFrom": "round_results",
+					"tableTo": "game_sessions",
+					"schemaTo": "public",
+					"columnsFrom": ["session_id"],
+					"columnsTo": ["id"],
+					"onDelete": "cascade",
+					"onUpdate": "no action"
+				}
+			},
+			"compositePrimaryKeys": {},
+			"uniqueConstraints": {},
+			"checkConstraints": {},
+			"policies": {},
+			"isRLSEnabled": false
+		}
+	},
+	"enums": {},
+	"schemas": {},
+	"sequences": {},
+	"roles": {},
+	"policies": {},
+	"views": {},
+	"_meta": {
+		"schemas": {},
+		"tables": {},
+		"columns": {}
+	},
+	"internal": {
+		"tables": {}
+	}
+}

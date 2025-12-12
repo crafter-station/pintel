@@ -1,12 +1,19 @@
-import { and, count, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, inArray, sql } from "drizzle-orm";
 import { type NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/db";
-import { drawings, gameSessions, guesses, modelScores } from "@/db/schema";
+import {
+	drawings,
+	gameSessions,
+	guesses,
+	modelScores,
+	playerScores,
+	roundResults,
+} from "@/db/schema";
 import { getCurrentIdentity } from "@/lib/identity";
 
 const SaveSessionSchema = z.object({
-	mode: z.enum(["human_judge", "model_guess", "ai_duel"]),
+	mode: z.enum(["pictionary", "human_judge", "model_guess", "ai_duel"]),
 	prompt: z.string(),
 	totalCost: z.number(),
 	totalTokens: z.number(),
@@ -28,6 +35,10 @@ const SaveSessionSchema = z.object({
 				modelId: z.string(),
 				guess: z.string(),
 				isCorrect: z.boolean(),
+				semanticScore: z.number().optional(),
+				timeBonus: z.number().optional(),
+				finalScore: z.number().optional(),
+				isHuman: z.boolean().optional(),
 				generationTimeMs: z.number().optional(),
 				cost: z.number().optional(),
 				tokens: z.number().optional(),
@@ -84,20 +95,54 @@ export async function GET(request: NextRequest) {
 
 		const sessionIds = sessions.map((s) => s.id);
 
-		const [allDrawings, allGuesses] = await Promise.all([
-			sessionIds.length > 0
-				? db
-						.select()
-						.from(drawings)
-						.where(inArray(drawings.sessionId, sessionIds))
-				: [],
-			sessionIds.length > 0
-				? db
-						.select()
-						.from(guesses)
-						.where(inArray(guesses.sessionId, sessionIds))
-				: [],
-		]);
+		const clerkUserIds = sessions
+			.map((s) => s.clerkUserId)
+			.filter((id): id is string => id !== null);
+		const anonIds = sessions
+			.map((s) => s.anonId)
+			.filter((id): id is string => id !== null);
+
+		const [allDrawings, allGuesses, allRounds, allPlayerScores] =
+			await Promise.all([
+				sessionIds.length > 0
+					? db
+							.select()
+							.from(drawings)
+							.where(inArray(drawings.sessionId, sessionIds))
+					: [],
+				sessionIds.length > 0
+					? db
+							.select()
+							.from(guesses)
+							.where(inArray(guesses.sessionId, sessionIds))
+					: [],
+				sessionIds.length > 0
+					? db
+							.select()
+							.from(roundResults)
+							.where(inArray(roundResults.sessionId, sessionIds))
+							.orderBy(asc(roundResults.roundNumber))
+					: [],
+				clerkUserIds.length > 0 || anonIds.length > 0
+					? db.select().from(playerScores)
+					: [],
+			]);
+
+		const playersByClerkId = allPlayerScores.reduce(
+			(acc, p) => {
+				if (p.clerkUserId) acc[p.clerkUserId] = p;
+				return acc;
+			},
+			{} as Record<string, typeof playerScores.$inferSelect>,
+		);
+
+		const playersByAnonId = allPlayerScores.reduce(
+			(acc, p) => {
+				if (p.anonId) acc[p.anonId] = p;
+				return acc;
+			},
+			{} as Record<string, typeof playerScores.$inferSelect>,
+		);
 
 		const drawingsBySession = allDrawings.reduce(
 			(acc, d) => {
@@ -117,30 +162,69 @@ export async function GET(request: NextRequest) {
 			{} as Record<string, Array<typeof guesses.$inferSelect>>,
 		);
 
-		const items = sessions.map((session) => ({
-			id: session.id,
-			mode: session.mode,
-			prompt: session.prompt,
-			totalCost: session.totalCost || 0,
-			totalTokens: session.totalTokens || 0,
-			totalTimeMs: session.totalTimeMs,
-			createdAt: session.createdAt.toISOString(),
-			drawings: (drawingsBySession[session.id] || []).map((d) => ({
-				id: d.id,
-				modelId: d.modelId,
-				svg: d.svg,
-				generationTimeMs: d.generationTimeMs,
-				cost: d.cost,
-				isWinner: d.isWinner,
-			})),
-			guesses: (guessesBySession[session.id] || []).map((g) => ({
-				id: g.id,
-				modelId: g.modelId,
-				guess: g.guess,
-				isCorrect: g.isCorrect,
-				generationTimeMs: g.generationTimeMs,
-			})),
-		}));
+		const roundsBySession = allRounds.reduce(
+			(acc, r) => {
+				if (!acc[r.sessionId]) acc[r.sessionId] = [];
+				acc[r.sessionId].push(r);
+				return acc;
+			},
+			{} as Record<string, Array<typeof roundResults.$inferSelect>>,
+		);
+
+		const items = sessions.map((session) => {
+			const sessionDrawings = drawingsBySession[session.id] || [];
+			const sessionRounds = roundsBySession[session.id] || [];
+
+			const player = session.clerkUserId
+				? playersByClerkId[session.clerkUserId]
+				: session.anonId
+					? playersByAnonId[session.anonId]
+					: null;
+
+			const allSessionDrawings = [
+				...sessionDrawings.map((d) => ({
+					id: d.id,
+					modelId: d.modelId,
+					svg: d.svg,
+					generationTimeMs: d.generationTimeMs,
+					cost: d.cost,
+					isWinner: d.isWinner,
+					chunks: d.chunks ? JSON.parse(d.chunks as string) : null,
+					isHumanDrawing: false,
+				})),
+				...sessionRounds
+					.filter((r) => r.drawerType === "human" && r.svg)
+					.map((r) => ({
+						id: r.id,
+						modelId: "human",
+						svg: r.svg as string,
+						generationTimeMs: null,
+						cost: null,
+						isWinner: false,
+						chunks: null,
+						isHumanDrawing: true,
+					})),
+			];
+
+			return {
+				id: session.id,
+				mode: session.mode,
+				prompt: session.prompt,
+				totalCost: session.totalCost || 0,
+				totalTokens: session.totalTokens || 0,
+				totalTimeMs: session.totalTimeMs,
+				createdAt: session.createdAt.toISOString(),
+				playerName: player?.username || null,
+				drawings: allSessionDrawings,
+				guesses: (guessesBySession[session.id] || []).map((g) => ({
+					id: g.id,
+					modelId: g.modelId,
+					guess: g.guess,
+					isCorrect: g.isCorrect,
+					generationTimeMs: g.generationTimeMs,
+				})),
+			};
+		});
 
 		return NextResponse.json({
 			items,
@@ -200,6 +284,10 @@ export async function POST(request: NextRequest) {
 					modelId: g.modelId,
 					guess: g.guess,
 					isCorrect: g.isCorrect,
+					semanticScore: g.semanticScore,
+					timeBonus: g.timeBonus,
+					finalScore: g.finalScore,
+					isHuman: g.isHuman,
 					generationTimeMs: g.generationTimeMs,
 					cost: g.cost,
 					tokens: g.tokens,
@@ -235,6 +323,10 @@ async function updateModelScores(data: z.infer<typeof SaveSessionSchema>) {
 			modelGuessCorrect?: number;
 			aiDuelPoints?: number;
 			aiDuelRounds?: number;
+			drawingScore?: number;
+			guessingScore?: number;
+			drawingRounds?: number;
+			guessingRounds?: number;
 			cost: number;
 			tokens: number;
 		}
@@ -331,6 +423,30 @@ async function updateModelScores(data: z.infer<typeof SaveSessionSchema>) {
 				aiDuelPoints: (existing.aiDuelPoints || 0) + 1,
 			});
 		}
+	} else if (data.mode === "pictionary") {
+		data.drawings.forEach((d) => {
+			const existing = modelUpdates.get(d.modelId) || { cost: 0, tokens: 0 };
+			const drawerBonus =
+				data.guesses?.reduce((sum, g) => {
+					if (g.modelId === d.modelId) return sum;
+					const multiplier = g.isHuman ? 1.5 : 1;
+					return sum + ((g.semanticScore || 0) > 0.7 ? 10 * multiplier : 0);
+				}, 0) || 0;
+			modelUpdates.set(d.modelId, {
+				...existing,
+				drawingScore: (existing.drawingScore || 0) + drawerBonus,
+				drawingRounds: (existing.drawingRounds || 0) + 1,
+			});
+		});
+
+		data.guesses?.forEach((g) => {
+			const existing = modelUpdates.get(g.modelId) || { cost: 0, tokens: 0 };
+			modelUpdates.set(g.modelId, {
+				...existing,
+				guessingScore: (existing.guessingScore || 0) + (g.semanticScore || 0),
+				guessingRounds: (existing.guessingRounds || 0) + 1,
+			});
+		});
 	}
 
 	for (const [modelId, updates] of modelUpdates.entries()) {
@@ -344,6 +460,10 @@ async function updateModelScores(data: z.infer<typeof SaveSessionSchema>) {
 				modelGuessCorrect: updates.modelGuessCorrect || 0,
 				aiDuelPoints: updates.aiDuelPoints || 0,
 				aiDuelRounds: updates.aiDuelRounds || 0,
+				drawingScore: updates.drawingScore || 0,
+				guessingScore: updates.guessingScore || 0,
+				drawingRounds: updates.drawingRounds || 0,
+				guessingRounds: updates.guessingRounds || 0,
 				totalCost: updates.cost,
 				totalTokens: updates.tokens,
 			})
@@ -356,6 +476,10 @@ async function updateModelScores(data: z.infer<typeof SaveSessionSchema>) {
 					modelGuessTotal: sql`${modelScores.modelGuessTotal} + ${updates.modelGuessTotal || 0}`,
 					aiDuelPoints: sql`${modelScores.aiDuelPoints} + ${updates.aiDuelPoints || 0}`,
 					aiDuelRounds: sql`${modelScores.aiDuelRounds} + ${updates.aiDuelRounds || 0}`,
+					drawingScore: sql`${modelScores.drawingScore} + ${updates.drawingScore || 0}`,
+					guessingScore: sql`${modelScores.guessingScore} + ${updates.guessingScore || 0}`,
+					drawingRounds: sql`${modelScores.drawingRounds} + ${updates.drawingRounds || 0}`,
+					guessingRounds: sql`${modelScores.guessingRounds} + ${updates.guessingRounds || 0}`,
 					totalCost: sql`${modelScores.totalCost} + ${updates.cost}`,
 					totalTokens: sql`${modelScores.totalTokens} + ${updates.tokens}`,
 					updatedAt: new Date(),

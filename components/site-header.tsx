@@ -3,8 +3,8 @@
 import Link from "next/link";
 import { AuthButtons } from "@/components/auth-buttons";
 import { DesktopNav } from "@/components/desktop-nav";
-import { MobileNav } from "@/components/mobile-nav";
 import { PintelLogoThemeAware } from "@/components/logos/pintel-theme-aware";
+import { MobileNav } from "@/components/mobile-nav";
 import { ToggleTheme } from "@/components/toggle-theme";
 import { MAIN_NAV } from "@/config/site";
 import { cn } from "@/lib/utils";

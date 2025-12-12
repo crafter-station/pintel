@@ -10,30 +10,59 @@ import {
 } from "drizzle-orm/pg-core";
 import { z } from "zod";
 
-export const GameModeSchema = z.enum(["pictionary", "human_judge", "model_guess", "ai_duel"]);
+export const GameModeSchema = z.enum([
+	"pictionary",
+	"human_judge",
+	"model_guess",
+	"ai_duel",
+]);
 
 export const gameSessions = pgTable("game_sessions", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  mode: text("mode", { enum: ["pictionary", "human_judge", "model_guess", "ai_duel"] }).notNull(),
-  prompt: text("prompt").notNull(),
-  totalCost: real("total_cost").default(0),
-  totalTokens: integer("total_tokens").default(0),
-  totalTimeMs: integer("total_time_ms"),
-  currentRound: integer("current_round").default(1),
-  totalRounds: integer("total_rounds").default(1),
-  anonId: text("anon_id"),
-  clerkUserId: text("clerk_user_id"),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
 	id: uuid("id").primaryKey().defaultRandom(),
 	mode: text("mode", {
-		enum: ["human_judge", "model_guess", "ai_duel"],
+		enum: ["pictionary", "human_judge", "model_guess", "ai_duel"],
 	}).notNull(),
 	prompt: text("prompt").notNull(),
 	totalCost: real("total_cost").default(0),
 	totalTokens: integer("total_tokens").default(0),
 	totalTimeMs: integer("total_time_ms"),
+	currentRound: integer("current_round").default(1),
+	totalRounds: integer("total_rounds").default(1),
 	anonId: text("anon_id"),
 	clerkUserId: text("clerk_user_id"),
+	createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const playerScores = pgTable("player_scores", {
+	id: uuid("id").primaryKey().defaultRandom(),
+	clerkUserId: text("clerk_user_id").unique(),
+	anonId: text("anon_id").unique(),
+	username: text("username"),
+	totalScore: integer("total_score").default(0),
+	gamesPlayed: integer("games_played").default(0),
+	gamesWon: integer("games_won").default(0),
+	roundsPlayed: integer("rounds_played").default(0),
+	drawingRounds: integer("drawing_rounds").default(0),
+	guessingRounds: integer("guessing_rounds").default(0),
+	drawingScore: real("drawing_score").default(0),
+	guessingScore: real("guessing_score").default(0),
+	bestRoundScore: integer("best_round_score").default(0),
+	createdAt: timestamp("created_at").defaultNow().notNull(),
+	updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const roundResults = pgTable("round_results", {
+	id: uuid("id").primaryKey().defaultRandom(),
+	sessionId: uuid("session_id")
+		.references(() => gameSessions.id, { onDelete: "cascade" })
+		.notNull(),
+	roundNumber: integer("round_number").notNull(),
+	drawerId: text("drawer_id").notNull(),
+	drawerType: text("drawer_type", { enum: ["human", "llm"] }).notNull(),
+	prompt: text("prompt").notNull(),
+	maxPossibleScore: integer("max_possible_score").notNull(),
+	topScore: integer("top_score").default(0),
+	svg: text("svg"),
 	createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -48,29 +77,24 @@ export const drawings = pgTable("drawings", {
 	cost: real("cost"),
 	tokens: integer("tokens"),
 	isWinner: boolean("is_winner").default(false),
-	chunks: text("chunks"), // JSON array of partial SVGs for replay
+	chunks: text("chunks"),
 });
 
 export const guesses = pgTable("guesses", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  sessionId: uuid("session_id").references(() => gameSessions.id, { onDelete: "cascade" }).notNull(),
-  modelId: text("model_id").notNull(),
-  guess: text("guess").notNull(),
-  isCorrect: boolean("is_correct").default(false),
-  semanticScore: real("semantic_score"),
-  timeBonus: integer("time_bonus").default(0),
-  finalScore: integer("final_score").default(0),
-  isHuman: boolean("is_human").default(false),
-  generationTimeMs: integer("generation_time_ms"),
-  cost: real("cost"),
-  tokens: integer("tokens"),
 	id: uuid("id").primaryKey().defaultRandom(),
 	sessionId: uuid("session_id")
 		.references(() => gameSessions.id, { onDelete: "cascade" })
 		.notNull(),
+	roundId: uuid("round_id").references(() => roundResults.id, {
+		onDelete: "cascade",
+	}),
 	modelId: text("model_id").notNull(),
 	guess: text("guess").notNull(),
 	isCorrect: boolean("is_correct").default(false),
+	semanticScore: real("semantic_score"),
+	timeBonus: integer("time_bonus").default(0),
+	finalScore: integer("final_score").default(0),
+	isHuman: boolean("is_human").default(false),
 	generationTimeMs: integer("generation_time_ms"),
 	cost: real("cost"),
 	tokens: integer("tokens"),
@@ -78,6 +102,10 @@ export const guesses = pgTable("guesses", {
 
 export const modelScores = pgTable("model_scores", {
 	modelId: text("model_id").primaryKey(),
+	drawingScore: real("drawing_score").default(0),
+	guessingScore: real("guessing_score").default(0),
+	drawingRounds: integer("drawing_rounds").default(0),
+	guessingRounds: integer("guessing_rounds").default(0),
 	humanJudgeWins: integer("human_judge_wins").default(0),
 	humanJudgePlays: integer("human_judge_plays").default(0),
 	modelGuessCorrect: integer("model_guess_correct").default(0),
@@ -89,10 +117,17 @@ export const modelScores = pgTable("model_scores", {
 	updatedAt: timestamp("updated_at").defaultNow(),
 });
 
-// Relations
 export const gameSessionsRelations = relations(gameSessions, ({ many }) => ({
 	drawings: many(drawings),
 	guesses: many(guesses),
+	rounds: many(roundResults),
+}));
+
+export const roundResultsRelations = relations(roundResults, ({ one }) => ({
+	session: one(gameSessions, {
+		fields: [roundResults.sessionId],
+		references: [gameSessions.id],
+	}),
 }));
 
 export const drawingsRelations = relations(drawings, ({ one }) => ({
@@ -107,9 +142,12 @@ export const guessesRelations = relations(guesses, ({ one }) => ({
 		fields: [guesses.sessionId],
 		references: [gameSessions.id],
 	}),
+	round: one(roundResults, {
+		fields: [guesses.roundId],
+		references: [roundResults.id],
+	}),
 }));
 
-// Type exports
 export type GameSession = typeof gameSessions.$inferSelect;
 export type NewGameSession = typeof gameSessions.$inferInsert;
 export type Drawing = typeof drawings.$inferSelect;
@@ -118,3 +156,7 @@ export type Guess = typeof guesses.$inferSelect;
 export type NewGuess = typeof guesses.$inferInsert;
 export type ModelScore = typeof modelScores.$inferSelect;
 export type NewModelScore = typeof modelScores.$inferInsert;
+export type PlayerScore = typeof playerScores.$inferSelect;
+export type NewPlayerScore = typeof playerScores.$inferInsert;
+export type RoundResult = typeof roundResults.$inferSelect;
+export type NewRoundResult = typeof roundResults.$inferInsert;

@@ -2,7 +2,7 @@ import { and, eq, isNull } from "drizzle-orm";
 import { headers } from "next/headers";
 import { type NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
-import { gameSessions } from "@/db/schema";
+import { gameSessions, playerScores } from "@/db/schema";
 
 const WEBHOOK_SECRET = process.env.CLERK_WEBHOOK_SECRET;
 
@@ -53,35 +53,70 @@ export async function POST(request: NextRequest) {
 
 		const eventType = evt.type;
 
-		if (eventType === "user.created") {
-			const { id: clerkUserId, public_metadata } = evt.data;
+		if (eventType === "user.created" || eventType === "user.updated") {
+			const {
+				id: clerkUserId,
+				public_metadata,
+				username,
+				first_name,
+				last_name,
+			} = evt.data;
 
-			const anonId = public_metadata?.anonId as string | undefined;
+			const displayName =
+				username || [first_name, last_name].filter(Boolean).join(" ") || null;
 
-			if (anonId) {
-				try {
-					await db
-						.update(gameSessions)
-						.set({
-							clerkUserId,
-							anonId: null,
-						})
-						.where(
-							and(
-								eq(gameSessions.anonId, anonId),
-								isNull(gameSessions.clerkUserId),
-							),
+			try {
+				await db
+					.update(playerScores)
+					.set({ username: displayName, updatedAt: new Date() })
+					.where(eq(playerScores.clerkUserId, clerkUserId));
+			} catch (error) {
+				console.error("Error updating username:", error);
+			}
+
+			if (eventType === "user.created") {
+				const anonId = public_metadata?.anonId as string | undefined;
+
+				if (anonId) {
+					try {
+						await db
+							.update(gameSessions)
+							.set({
+								clerkUserId,
+								anonId: null,
+							})
+							.where(
+								and(
+									eq(gameSessions.anonId, anonId),
+									isNull(gameSessions.clerkUserId),
+								),
+							);
+
+						await db
+							.update(playerScores)
+							.set({
+								clerkUserId,
+								anonId: null,
+								username: displayName,
+								updatedAt: new Date(),
+							})
+							.where(
+								and(
+									eq(playerScores.anonId, anonId),
+									isNull(playerScores.clerkUserId),
+								),
+							);
+					} catch (error) {
+						console.error("Error merging sessions:", error);
+						return NextResponse.json(
+							{ error: "Failed to merge sessions" },
+							{ status: 500 },
 						);
-
-					return NextResponse.json({ success: true });
-				} catch (error) {
-					console.error("Error merging sessions:", error);
-					return NextResponse.json(
-						{ error: "Failed to merge sessions" },
-						{ status: 500 },
-					);
+					}
 				}
 			}
+
+			return NextResponse.json({ success: true });
 		}
 
 		return NextResponse.json({ received: true });
