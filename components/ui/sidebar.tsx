@@ -5,6 +5,7 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { PanelLeftIcon } from "lucide-react";
 import * as React from "react";
 import { Button } from "@/components/ui/button";
+import { useSound } from "@/hooks/use-sound";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import {
@@ -501,6 +502,8 @@ function SidebarMenuButton({
 	size = "default",
 	tooltip,
 	className,
+	onClick,
+	disabled,
 	...props
 }: React.ComponentProps<"button"> & {
 	asChild?: boolean;
@@ -509,6 +512,14 @@ function SidebarMenuButton({
 } & VariantProps<typeof sidebarMenuButtonVariants>) {
 	const Comp = asChild ? Slot : "button";
 	const { isMobile, state } = useSidebar();
+	const playClickSound = useSound("/sounds/click.mp3", 0.3);
+
+	const handleClick = (event: React.MouseEvent<HTMLButtonElement>) => {
+		if (!disabled) {
+			playClickSound();
+		}
+		onClick?.(event);
+	};
 
 	const button = (
 		<Comp
@@ -517,6 +528,8 @@ function SidebarMenuButton({
 			data-size={size}
 			data-active={isActive}
 			className={cn(sidebarMenuButtonVariants({ variant, size }), className)}
+			onClick={handleClick}
+			disabled={disabled}
 			{...props}
 		/>
 	);
