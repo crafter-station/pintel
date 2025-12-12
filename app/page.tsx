@@ -36,23 +36,8 @@ const gameModes = [
 export default function Home() {
   return (
     <div className={`${contentContainer} space-y-12 py-8`}>
-      <header className="text-center space-y-4">
-        <div className="flex justify-center">
-          <PintelLogoThemeAware className="h-40 w-auto" />
-        </div>
-        <p className="text-muted-foreground font-mono text-sm tracking-widest">
-          draw • guess • evaluate
-        </p>
-      </header>
-
       <SectionSeparator />
 
-      <p className="text-center text-muted-foreground max-w-md mx-auto">
-        A multimodal game where humans and AI models try to understand each
-        other's drawings.
-      </p>
-
-      {/* ---- TABS ---- */}
       <Tabs defaultValue="human-play" className="w-full space-y-4">
         <TabsList className="grid grid-cols-4 w-full">
           {gameModes.map((mode) => (
@@ -63,12 +48,11 @@ export default function Home() {
           ))}
         </TabsList>
 
-        {/* TAB 1: Human Play (vacío) */}
-        <TabsContent value="human-play" className="p-6 rounded-xl border">
-          {/* contenido vacío */}
-        </TabsContent>
+        <TabsContent
+          value="human-play"
+          className="p-6 rounded-xl border"
+        ></TabsContent>
 
-        {/* TAB 2: Human Judge */}
         <TabsContent value="human-judge" className="p-6 rounded-xl border">
           <GameModeCard
             mode={{
@@ -83,7 +67,6 @@ export default function Home() {
           />
         </TabsContent>
 
-        {/* TAB 3: Model Guess */}
         <TabsContent value="model-guess" className="p-6 rounded-xl border">
           <GameModeCard
             mode={{
@@ -97,7 +80,6 @@ export default function Home() {
           />
         </TabsContent>
 
-        {/* TAB 4: AI Duel */}
         <TabsContent value="ai-duel" className="p-6 rounded-xl border">
           <GameModeCard
             mode={{
@@ -114,15 +96,6 @@ export default function Home() {
       </Tabs>
 
       <SectionSeparator />
-
-      <div className="flex items-center justify-center gap-4">
-        <Button variant="outline" size="sm" asChild>
-          <Link href="/gallery">Gallery</Link>
-        </Button>
-        <Button variant="outline" size="sm" asChild>
-          <Link href="/leaderboard">Leaderboard</Link>
-        </Button>
-      </div>
 
       <SectionSeparator />
 
