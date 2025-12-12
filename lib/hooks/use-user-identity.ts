@@ -4,6 +4,25 @@ import { useCallback, useEffect, useState } from "react";
 
 const ANON_ID_KEY = "pintel_anon_id";
 
+// Fallback UUID generator for browsers without crypto.randomUUID (older iOS Safari)
+function generateUUID(): string {
+	if (typeof crypto !== "undefined" && crypto.randomUUID) {
+		return crypto.randomUUID();
+	}
+	// Fallback using crypto.getRandomValues
+	if (typeof crypto !== "undefined" && crypto.getRandomValues) {
+		return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+			const r = (crypto.getRandomValues(new Uint8Array(1))[0] & 15) >> (c === "x" ? 0 : 3);
+			return (c === "x" ? r : (r & 0x3) | 0x8).toString(16);
+		});
+	}
+	// Last resort fallback
+	return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+		const r = (Math.random() * 16) | 0;
+		return (c === "x" ? r : (r & 0x3) | 0x8).toString(16);
+	});
+}
+
 export interface UserIdentity {
 	anonId: string | null;
 	clerkUserId: string | null;
@@ -38,7 +57,7 @@ export function useUserIdentity() {
 	const [clerkLoaded, setClerkLoaded] = useState(false);
 
 	const generateAnonId = useCallback(() => {
-		return crypto.randomUUID();
+		return generateUUID();
 	}, []);
 
 	const initializeAnonId = useCallback(async () => {
