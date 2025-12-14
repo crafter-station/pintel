@@ -44,7 +44,7 @@ export default function Home() {
 	return (
 		<div className={`${contentContainer} py-8 md:py-12`}>
 			{/* Hero */}
-			<header className="text-center space-y-6 mb-12">
+			<header className="text-center space-y-6 mb-10">
 				<div className="flex justify-center">
 					<LogoAnimation className="w-48 md:w-64 h-auto" />
 				</div>
@@ -64,10 +64,14 @@ export default function Home() {
 
 			{/* Game Modes */}
 			<section className="space-y-4">
-				<h2 className="text-xs font-medium text-muted-foreground uppercase tracking-widest text-center">
-					Game Modes
-				</h2>
-				<div className="grid gap-3">
+				<div className="flex items-center gap-3">
+					<div className="h-px flex-1 bg-border/50" />
+					<h2 className="text-xs font-medium text-muted-foreground uppercase tracking-widest text-center">
+						Game Modes
+					</h2>
+					<div className="h-px flex-1 bg-border/50" />
+				</div>
+				<div className="grid gap-2">
 					{gameModes.map((mode) => (
 						<GameModeCard key={mode.id} mode={mode} />
 					))}
