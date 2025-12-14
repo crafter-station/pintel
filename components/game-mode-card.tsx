@@ -34,7 +34,7 @@ export function GameModeCard({ mode }: { mode: GameMode }) {
 						: "opacity-50",
 				)}
 			>
-				<CardContent className="flex items-start gap-3 py-5">
+				<CardContent className="flex items-center gap-3 py-5">
 					<div
 						className={cn(
 							"p-2.5 rounded-md transition-colors",
