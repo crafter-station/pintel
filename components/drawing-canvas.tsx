@@ -33,6 +33,7 @@ export function DrawingCanvas({
 	className,
 }: DrawingCanvasProps) {
 	const canvasRef = useRef<HTMLCanvasElement>(null);
+	const cursorRef = useRef<HTMLDivElement>(null);
 	const [isDrawing, setIsDrawing] = useState(false);
 	const [color, setColor] = useState("#000000");
 	const [brushSize, setBrushSize] = useState(8);
@@ -220,6 +221,30 @@ export function DrawingCanvas({
 		}
 	};
 
+	const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
+		if (cursorRef.current) {
+			const rect = canvasRef.current!.getBoundingClientRect();
+			const x = e.clientX - rect.left;
+			const y = e.clientY - rect.top;
+			cursorRef.current.style.left = `${x}px`;
+			cursorRef.current.style.top = `${y}px`;
+		}
+		draw(e);
+	};
+
+	const handleMouseLeave = () => {
+		if (cursorRef.current) {
+			cursorRef.current.style.display = "none";
+		}
+		stopDrawing();
+	};
+
+	const handleMouseEnter = () => {
+		if (cursorRef.current) {
+			cursorRef.current.style.display = "block";
+		}
+	};
+
 	const _getDataUrl = useCallback(() => {
 		const canvas = canvasRef.current;
 		if (!canvas) return "";
@@ -230,15 +255,26 @@ export function DrawingCanvas({
 		<div className={cn("flex flex-col gap-3 sm:gap-4", className)}>
 			{/* Canvas */}
 			<div className="relative rounded-xl overflow-hidden border-2 border-border bg-white shadow-lg">
+				<div
+					ref={cursorRef}
+					className="absolute rounded-full pointer-events-none -translate-x-1/2 -translate-y-1/2 border border-gray-500"
+					style={{
+						width: brushSize,
+						height: brushSize,
+						display: "none",
+						backgroundColor: tool === "eraser" ? "white" : "transparent",
+					}}
+				/>
 				<canvas
 					ref={canvasRef}
 					width={width}
 					height={height}
-					className="touch-none cursor-crosshair w-full h-auto"
+					className="touch-none cursor-none w-full h-auto"
 					onMouseDown={startDrawing}
-					onMouseMove={draw}
+					onMouseMove={handleMouseMove}
 					onMouseUp={stopDrawing}
-					onMouseLeave={stopDrawing}
+					onMouseLeave={handleMouseLeave}
+					onMouseEnter={handleMouseEnter}
 					onTouchStart={startDrawing}
 					onTouchMove={draw}
 					onTouchEnd={stopDrawing}
