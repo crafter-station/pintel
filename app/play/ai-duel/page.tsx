@@ -578,7 +578,10 @@ export default function AIDuelPage() {
         <header className="flex items-center justify-between">
           <div className="flex-1">
             <h1 className="text-2xl font-mono font-light">AI Duel</h1>
-            <p className="text-sm text-muted-foreground">Watch AI compete</p>
+            <p className="text-sm text-muted-foreground">
+              Select 3-6 AI models to compete. They'll take turns drawing and
+              guessing.
+            </p>
           </div>
           <div className="flex items-center gap-2">
             <Tooltip>
@@ -605,15 +608,6 @@ export default function AIDuelPage() {
         {/* Setup */}
         {state.status === "setup" && (
           <div className="space-y-6">
-            <div className="text-center space-y-2">
-              <Bot className="size-12 mx-auto text-primary" />
-              <h2 className="text-2xl font-light">AI Duel Arena</h2>
-              <p className="text-muted-foreground">
-                Select 3-6 AI models to compete. They'll take turns drawing and
-                guessing.
-              </p>
-            </div>
-
             <Card>
               <CardContent className="p-6">
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
