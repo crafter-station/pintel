@@ -3,6 +3,7 @@ import { ClerkThemeProvider } from "@/components/providers/clerk-theme-provider"
 import { QueryProvider } from "@/components/providers/query-provider";
 import { SessionMergeProvider } from "@/components/providers/session-merge-provider";
 import { ThemeProvider } from "@/components/providers/theme-provider";
+import { GithubBadge } from "@/components/github-badge";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 import { ThemeScript } from "@/components/theme-script";
@@ -55,6 +56,7 @@ function AppShell({ children }: { children: React.ReactNode }) {
 			<SiteHeader />
 			<MainContent>{children}</MainContent>
 			<SiteFooter />
+			<GithubBadge />
 		</>
 	);
 }
