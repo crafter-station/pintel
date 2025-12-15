@@ -12,13 +12,8 @@ export function SiteFooter() {
 	return (
 		<footer className="max-w-screen overflow-x-hidden px-2">
 			<div className="screen-line-before mx-auto border-x border-edge pt-4 md:max-w-3xl">
-				<p className="mb-1 px-4 text-center font-mono text-sm text-balance text-muted-foreground">
-					A multimodal AI evaluation game where humans and models draw, guess,
-					and evaluate each other.
-				</p>
-
-				<p className="mb-4 px-4 text-center font-mono text-sm text-balance text-muted-foreground">
-					Built with{" "}
+				<p className="mb-4 px-4 text-center font-mono text-xs text-muted-foreground">
+					Powered by{" "}
 					<a
 						className="link"
 						href="https://vercel.com/ai-gateway"
@@ -27,7 +22,6 @@ export function SiteFooter() {
 					>
 						Vercel AI Gateway
 					</a>
-					.
 				</p>
 
 				<div className={footerGridPattern}>
