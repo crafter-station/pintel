@@ -1,5 +1,6 @@
 import { CrafterStationLogo } from "@/components/logos/crafter-station";
 import { GithubLogoThemeAware } from "@/components/logos/github-theme-aware";
+import { MoralejaDesignLogo } from "@/components/logos/moraleja-design";
 import { cn } from "@/lib/utils";
 
 const footerGridPattern = cn(
@@ -51,6 +52,18 @@ export function SiteFooter() {
 						>
 							<CrafterStationLogo className="size-5" />
 							<span className="sr-only">Crafter Station</span>
+						</a>
+
+						<Separator />
+
+						<a
+							className="flex items-center transition-colors hover:opacity-80"
+							href="https://moraleja.design"
+							target="_blank"
+							rel="noopener noreferrer"
+						>
+							<MoralejaDesignLogo className="size-5" />
+							<span className="sr-only">Moraleja Design</span>
 						</a>
 					</div>
 				</div>
