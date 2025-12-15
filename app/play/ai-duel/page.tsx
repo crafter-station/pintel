@@ -1,21 +1,21 @@
 "use client";
 
 import {
-  Bot,
-  Check,
-  Clock,
-  Coins,
-  DollarSign,
-  Eye,
-  FastForward,
-  Pause,
-  Pencil,
-  Play,
-  RotateCcw,
-  Shuffle,
-  Trophy,
-  X,
-  Zap,
+	Bot,
+	Check,
+	Clock,
+	Coins,
+	DollarSign,
+	Eye,
+	FastForward,
+	Pause,
+	Pencil,
+	Play,
+	RotateCcw,
+	Shuffle,
+	Trophy,
+	X,
+	Zap,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { SignupPrompt } from "@/components/signup-prompt";
@@ -25,52 +25,52 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Spinner } from "@/components/ui/spinner";
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
+	Tooltip,
+	TooltipContent,
+	TooltipProvider,
+	TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useSaveSession } from "@/lib/hooks/use-gallery";
 import { useUserIdentity } from "@/lib/hooks/use-user-identity";
 import {
-  DEFAULT_VISION_MODELS,
-  formatCost,
-  getModelById,
-  getVisionModels,
-  shuffleModels,
+	DEFAULT_VISION_MODELS,
+	formatCost,
+	getModelById,
+	getVisionModels,
+	shuffleModels,
 } from "@/lib/models";
 import { getRandomPrompt } from "@/lib/prompts";
 import { cn } from "@/lib/utils";
 
 interface DuelState {
-  status: "setup" | "running" | "paused" | "round-end" | "finished";
-  selectedModels: string[];
-  currentRound: number;
-  totalRounds: number;
-  currentDrawer: string | null;
-  currentPrompt: string;
-  currentSvg: string | null;
-  guesses: Record<
-    string,
-    { guess: string; isCorrect: boolean; timeMs: number }
-  >;
-  leaderboard: Record<
-    string,
-    { draws: number; correctGuesses: number; points: number }
-  >;
-  totalCost: number;
-  totalTokens: number;
-  roundHistory: RoundResult[];
-  autoPlay: boolean;
-  speed: "normal" | "fast" | "instant";
+	status: "setup" | "running" | "paused" | "round-end" | "finished";
+	selectedModels: string[];
+	currentRound: number;
+	totalRounds: number;
+	currentDrawer: string | null;
+	currentPrompt: string;
+	currentSvg: string | null;
+	guesses: Record<
+		string,
+		{ guess: string; isCorrect: boolean; timeMs: number }
+	>;
+	leaderboard: Record<
+		string,
+		{ draws: number; correctGuesses: number; points: number }
+	>;
+	totalCost: number;
+	totalTokens: number;
+	roundHistory: RoundResult[];
+	autoPlay: boolean;
+	speed: "normal" | "fast" | "instant";
 }
 
 interface RoundResult {
-  drawer: string;
-  prompt: string;
-  svg: string;
-  guesses: Record<string, { guess: string; isCorrect: boolean }>;
-  winner: string | null;
+	drawer: string;
+	prompt: string;
+	svg: string;
+	guesses: Record<string, { guess: string; isCorrect: boolean }>;
+	winner: string | null;
 }
 
 export default function AIDuelPage() {

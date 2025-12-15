@@ -1,9 +1,9 @@
+import { Brush, MessageCircle, Sparkles, User } from "lucide-react";
 import Link from "next/link";
-import { Button } from "@/components/ui/button";
 import { GameModeCard } from "@/components/game-mode-card";
 import { LogoAnimation } from "@/components/logo-animation";
+import { Button } from "@/components/ui/button";
 import { contentContainer } from "@/lib/grid-patterns";
-import { Brush, MessageCircle, Sparkles, User } from "lucide-react";
 
 const gameModes = [
   {

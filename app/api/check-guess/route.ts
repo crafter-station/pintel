@@ -117,7 +117,7 @@ function calculateCombinedScore(
 
 	// Length penalty: penalize if guess is much shorter than prompt
 	const lengthRatio = Math.min(guessWords.length / promptWords.length, 1);
-	const lengthPenalty = Math.pow(lengthRatio, 0.5); // Square root for gentler penalty
+	const lengthPenalty = lengthRatio ** 0.5; // Square root for gentler penalty
 
 	// Weighted combination
 	// - Coverage matters most (did they get the key concepts?)
@@ -255,4 +255,3 @@ export async function POST(request: Request) {
 		});
 	}
 }
-

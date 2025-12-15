@@ -1,8 +1,7 @@
 "use client";
 
 import Lottie from "lottie-react";
-import { useTheme } from "next-themes";
-import { useEffect, useState } from "react";
+import { useTheme } from "@/hooks/use-theme";
 import animationData from "@/public/pIntel_animation_brand.json";
 
 interface LogoAnimationProps {
@@ -10,17 +9,10 @@ interface LogoAnimationProps {
 }
 
 export function LogoAnimation({ className }: LogoAnimationProps) {
-	const { resolvedTheme } = useTheme();
-	const [mounted, setMounted] = useState(false);
+	const { mounted, isDark } = useTheme();
 
-	useEffect(() => {
-		setMounted(true);
-	}, []);
+	const isLight = mounted && !isDark;
 
-	const isLight = mounted && resolvedTheme === "light";
-
-	// Reserve space with aspect ratio to prevent layout shift
-	// The animation is 1920x1080 (16:9 aspect ratio)
 	return (
 		<div className={className} style={{ aspectRatio: "16/9" }}>
 			<Lottie

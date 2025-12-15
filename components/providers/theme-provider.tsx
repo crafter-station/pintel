@@ -1,19 +1,46 @@
 "use client";
 
-import { ThemeProvider as NextThemesProvider } from "next-themes";
+import React, { useEffect } from "react";
+import { useThemeStore } from "@/stores/theme";
 
-type ThemeProviderProps = React.ComponentProps<typeof NextThemesProvider>;
+type ThemeContextValue = {
+	mounted: boolean;
+	mode: "light" | "dark";
+	isDark: boolean;
+	setMode: (mode: "light" | "dark") => void;
+	toggleMode: (coords?: { x: number; y: number }) => void;
+};
 
-export function ThemeProvider({ children, ...props }: ThemeProviderProps) {
+const ThemeContext = React.createContext<ThemeContextValue | null>(null);
+
+export function useThemeContext(): ThemeContextValue {
+	const context = React.useContext(ThemeContext);
+	if (!context) {
+		throw new Error("useThemeContext must be used within a ThemeProvider");
+	}
+	return context;
+}
+
+export function ThemeProvider({ children }: { children: React.ReactNode }) {
+	const store = useThemeStore();
+
+	useEffect(() => {
+		if (!store.mounted) {
+			store.initialize();
+		}
+	}, [store.mounted, store.initialize]);
+
+	const contextValue: ThemeContextValue = {
+		mounted: store.mounted,
+		mode: store.mode,
+		isDark: store.isDark,
+		setMode: store.setMode,
+		toggleMode: store.toggleMode,
+	};
+
 	return (
-		<NextThemesProvider
-			attribute="class"
-			defaultTheme="dark"
-			enableSystem
-			disableTransitionOnChange
-			{...props}
-		>
+		<ThemeContext.Provider value={contextValue}>
 			{children}
-		</NextThemesProvider>
+		</ThemeContext.Provider>
 	);
 }

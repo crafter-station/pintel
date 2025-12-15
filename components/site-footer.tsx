@@ -1,5 +1,6 @@
 import { CrafterStationLogo } from "@/components/logos/crafter-station";
 import { GithubLogoThemeAware } from "@/components/logos/github-theme-aware";
+import { MoralejaDesignLogo } from "@/components/logos/moraleja-design";
 import { cn } from "@/lib/utils";
 import { MoralejaLogo } from "./logos/moraleja";
 import { PlusIcon } from "lucide-react";
