@@ -1,16 +1,25 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { ClerkThemeProvider } from "@/components/providers/clerk-theme-provider";
 import { QueryProvider } from "@/components/providers/query-provider";
 import { SessionMergeProvider } from "@/components/providers/session-merge-provider";
 import { ThemeProvider } from "@/components/providers/theme-provider";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
+import { ThemeScript } from "@/components/theme-script";
 import { diagonalGridPattern } from "@/lib/grid-patterns";
 import "./globals.css";
 
 const siteUrl = process.env.VERCEL_PROJECT_PRODUCTION_URL
 	? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
 	: "http://localhost:3000";
+
+export const viewport: Viewport = {
+	themeColor: [
+		{ media: "(prefers-color-scheme: light)", color: "#ffffff" },
+		{ media: "(prefers-color-scheme: dark)", color: "#000000" },
+	],
+	colorScheme: "light dark",
+};
 
 export const metadata: Metadata = {
 	metadataBase: new URL(siteUrl),
@@ -59,6 +68,9 @@ export default function RootLayout({
 
 	return (
 		<html lang="en" suppressHydrationWarning>
+			<head>
+				<ThemeScript />
+			</head>
 			<body className="min-h-screen bg-background font-sans antialiased">
 				<ThemeProvider>
 					<QueryProvider>

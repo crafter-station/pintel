@@ -2,7 +2,7 @@
 
 import { ClerkProvider } from "@clerk/nextjs";
 import { dark } from "@clerk/themes";
-import { useTheme } from "next-themes";
+import { useTheme } from "@/hooks/use-theme";
 
 export function ClerkThemeProvider({
 	children,
@@ -11,13 +11,13 @@ export function ClerkThemeProvider({
 	children: React.ReactNode;
 	publishableKey: string;
 }) {
-	const { resolvedTheme } = useTheme();
+	const { isDark } = useTheme();
 
 	return (
 		<ClerkProvider
 			publishableKey={publishableKey}
 			appearance={{
-				baseTheme: resolvedTheme === "dark" ? dark : undefined,
+				baseTheme: isDark ? dark : undefined,
 			}}
 		>
 			{children}

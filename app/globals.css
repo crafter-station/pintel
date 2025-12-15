@@ -163,3 +163,28 @@
 .dark {
   --edge: color-mix(in oklab, var(--border) 96%, var(--background));
 }
+
+/* View Transition animations for smooth theme switching */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+
+::view-transition-old(root) {
+  z-index: 1;
+}
+
+::view-transition-new(root) {
+  z-index: 9999;
+  animation: circle-reveal 0.5s ease-out;
+}
+
+@keyframes circle-reveal {
+  from {
+    clip-path: circle(0% at var(--x, 50%) var(--y, 50%));
+  }
+  to {
+    clip-path: circle(150% at var(--x, 50%) var(--y, 50%));
+  }
+}
