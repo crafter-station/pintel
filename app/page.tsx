@@ -66,9 +66,9 @@ export default function Home() {
 			<section className="space-y-4">
 				<div className="flex items-center gap-3">
 					<div className="h-px flex-1 bg-border/50" />
-					<h2 className="text-xs font-medium text-muted-foreground uppercase tracking-widest text-center">
-						Game Modes
-					</h2>
+				<h2 className="text-xs font-medium text-muted-foreground uppercase tracking-widest text-center">
+					Game Modes
+				</h2>
 					<div className="h-px flex-1 bg-border/50" />
 				</div>
 				<div className="grid gap-2">
