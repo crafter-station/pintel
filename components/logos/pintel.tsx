@@ -32,4 +32,3 @@ export function PintelLogo({ mode = "light", ...props }: PintelLogoProps) {
 		</svg>
 	);
 }
-

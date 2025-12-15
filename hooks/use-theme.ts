@@ -18,4 +18,3 @@ export function useTheme() {
 		toggleTheme: store.toggleMode,
 	};
 }
-

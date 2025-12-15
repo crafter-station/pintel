@@ -1,7 +1,7 @@
 "use client";
 
-import { useThemeStore } from "@/stores/theme";
 import React, { useEffect } from "react";
+import { useThemeStore } from "@/stores/theme";
 
 type ThemeContextValue = {
 	mounted: boolean;

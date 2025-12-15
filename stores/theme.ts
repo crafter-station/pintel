@@ -122,4 +122,3 @@ export const useThemeStore = create<ThemeStore>()(
 		{ name: "theme-store" },
 	),
 );
-

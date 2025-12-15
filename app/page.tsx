@@ -1,9 +1,9 @@
+import { Brush, MessageCircle, Sparkles, User } from "lucide-react";
 import Link from "next/link";
-import { Button } from "@/components/ui/button";
 import { GameModeCard } from "@/components/game-mode-card";
 import { LogoAnimation } from "@/components/logo-animation";
+import { Button } from "@/components/ui/button";
 import { contentContainer } from "@/lib/grid-patterns";
-import { Brush, MessageCircle, Sparkles, User } from "lucide-react";
 
 const gameModes = [
 	{
@@ -66,9 +66,9 @@ export default function Home() {
 			<section className="space-y-4">
 				<div className="flex items-center gap-3">
 					<div className="h-px flex-1 bg-border/50" />
-				<h2 className="text-xs font-medium text-muted-foreground uppercase tracking-widest text-center">
-					Game Modes
-				</h2>
+					<h2 className="text-xs font-medium text-muted-foreground uppercase tracking-widest text-center">
+						Game Modes
+					</h2>
 					<div className="h-px flex-1 bg-border/50" />
 				</div>
 				<div className="grid gap-2">

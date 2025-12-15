@@ -14,12 +14,8 @@ export function useSound(soundPath: string, volume = 0.3) {
 			}
 
 			audioRef.current.currentTime = 0;
-			audioRef.current.play().catch(() => {
-				
-			});
-		} catch (error) {
-		
-		}
+			audioRef.current.play().catch(() => {});
+		} catch (error) {}
 	}, [soundPath, volume]);
 
 	return playSound;
