@@ -2,44 +2,73 @@ import { CrafterStationLogo } from "@/components/logos/crafter-station";
 import { GithubLogoThemeAware } from "@/components/logos/github-theme-aware";
 import { MoralejaDesignLogo } from "@/components/logos/moraleja-design";
 import { cn } from "@/lib/utils";
-import { MoralejaLogo } from "./logos/moraleja";
-import { PlusIcon } from "lucide-react";
 
 const footerGridPattern = cn(
-  "screen-line-before screen-line-after flex w-full before:z-1 after:z-1",
-  "bg-[repeating-linear-gradient(315deg,var(--pattern-foreground)_0,var(--pattern-foreground)_1px,transparent_0,transparent_50%)] bg-size-[10px_10px] [--pattern-foreground:var(--color-edge)]/56",
+	"screen-line-before screen-line-after flex w-full before:z-1 after:z-1",
+	"bg-[repeating-linear-gradient(315deg,var(--pattern-foreground)_0,var(--pattern-foreground)_1px,transparent_0,transparent_50%)] bg-size-[10px_10px] [--pattern-foreground:var(--color-edge)]/56",
 );
 
 export function SiteFooter() {
-  return (
-    <footer className="max-w-screen overflow-x-hidden px-2">
-      <div className="screen-line-before mx-auto border-x border-edge md:max-w-3xl">
-        <div className={footerGridPattern}>
-          <div className="mx-auto flex items-center justify-center gap-3 border-x border-edge bg-background px-4 h-16 border-t ">
-            <a
-              className="flex items-center transition-colors hover:opacity-80"
-              href="https://crafterstation.com/"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              <CrafterStationLogo className="size-5" />
-              <span className="sr-only">Crafter Station</span>
-            </a>
+	return (
+		<footer className="max-w-screen overflow-x-hidden px-2">
+			<div className="screen-line-before mx-auto border-x border-edge pt-4 md:max-w-3xl">
+				<p className="mb-4 px-4 text-center font-mono text-xs text-muted-foreground">
+					Powered by{" "}
+					<a
+						className="link"
+						href="https://vercel.com/ai-gateway"
+						target="_blank"
+						rel="noopener"
+					>
+						Vercel AI Gateway
+					</a>
+				</p>
 
-            <PlusIcon className="size-3" />
+				<div className={footerGridPattern}>
+					<div className="mx-auto flex items-center justify-center gap-3 border-x border-edge bg-background px-4">
+						<a
+							className="flex items-center transition-colors hover:opacity-80"
+							href="https://github.com/crafter-station/pintel"
+							target="_blank"
+							rel="noopener noreferrer"
+							aria-label="GitHub"
+						>
+							<GithubLogoThemeAware className="size-5" variant="invertocat" />
+						</a>
 
-            <a
-              className="flex items-center transition-colors hover:opacity-80"
-              href="https://www.behance.net/behappy15"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              <MoralejaLogo className="-mx-2" />
-              <span className="sr-only">Moraleja</span>
-            </a>
-          </div>
-        </div>
-      </div>
-    </footer>
-  );
+						<Separator />
+
+						<a
+							className="flex items-center transition-colors hover:opacity-80"
+							href="https://crafterstation.com/"
+							target="_blank"
+							rel="noopener noreferrer"
+						>
+							<CrafterStationLogo className="size-5" />
+							<span className="sr-only">Crafter Station</span>
+						</a>
+
+						<Separator />
+
+						<a
+							className="flex items-center transition-colors hover:opacity-80"
+							href="https://moraleja.design"
+							target="_blank"
+							rel="noopener noreferrer"
+						>
+							<MoralejaDesignLogo className="size-5" />
+							<span className="sr-only">Moraleja Design</span>
+						</a>
+					</div>
+				</div>
+			</div>
+			<div className="pb-[env(safe-area-inset-bottom,0px)]">
+				<div className="flex h-2" />
+			</div>
+		</footer>
+	);
+}
+
+function Separator() {
+	return <div className="flex h-11 w-px bg-edge" />;
 }
