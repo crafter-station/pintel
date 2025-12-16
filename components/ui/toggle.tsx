@@ -3,7 +3,7 @@
 import * as TogglePrimitive from "@radix-ui/react-toggle";
 import { cva, type VariantProps } from "class-variance-authority";
 import type * as React from "react";
-
+import { useSound } from "@/hooks/use-sound";
 import { cn } from "@/lib/utils";
 
 const toggleVariants = cva(
@@ -32,13 +32,26 @@ function Toggle({
 	className,
 	variant,
 	size,
+	onClick,
+	disabled,
 	...props
 }: React.ComponentProps<typeof TogglePrimitive.Root> &
 	VariantProps<typeof toggleVariants>) {
+	const playClickSound = useSound("/sounds/click.mp3", 0.3);
+
+	const handleClick = (event: React.MouseEvent<HTMLButtonElement>) => {
+		if (!disabled) {
+			playClickSound();
+		}
+		onClick?.(event);
+	};
+
 	return (
 		<TogglePrimitive.Root
 			data-slot="toggle"
 			className={cn(toggleVariants({ variant, size, className }))}
+			onClick={handleClick}
+			disabled={disabled}
 			{...props}
 		/>
 	);
