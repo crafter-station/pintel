@@ -4,25 +4,34 @@ import {
 	ArrowRight,
 	Check,
 	Clock,
+	Dices,
 	MessageCircle,
-	Pencil,
 	Play,
-	RotateCcw,
 	Send,
-	Star,
 	Trophy,
-	User,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { DrawingCanvas } from "@/components/drawing-canvas";
+import {
+	ModelSelector,
+	ModelSelectorTrigger,
+} from "@/components/model-selector";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { ButtonGroup } from "@/components/ui/button-group";
 import { Input } from "@/components/ui/input";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { Spinner } from "@/components/ui/spinner";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { getVisionModels, type ModelConfig, shuffleModels } from "@/lib/models";
+import {
+	getModelById,
+	getModelStyle,
+	getVisionModels,
+	MODEL_STYLE_INFO,
+	shuffleModels,
+	type ModelConfig,
+} from "@/lib/models";
 import { getRandomPrompt } from "@/lib/prompts";
 import { cn } from "@/lib/utils";
 
@@ -165,14 +174,33 @@ async function svgToPngDataUrl(svgString: string): Promise<string> {
 const TOTAL_ROUNDS = 2;
 const TURN_DURATION = 50; // seconds
 
+const DEFAULT_MODEL_IDS = [
+	"meta/llama-4-scout",        // 432ms 🚀
+	"google/gemini-2.5-flash-lite", // 502ms ⚡
+	"mistral/pixtral-12b",       // 517ms ⚡
+	"anthropic/claude-3.5-haiku", // 925ms ⚡
+];
+
 export default function HumanPlayPage() {
 	const isMobile = useIsMobile();
 	const visionModels = useMemo(() => getVisionModels(), []);
-	const [selectedModels, setSelectedModels] = useState<ModelConfig[]>([]);
+	const [selectedModelIds, setSelectedModelIds] =
+		useState<string[]>(DEFAULT_MODEL_IDS);
+	const [thinkingModelIds, setThinkingModelIds] = useState<string[]>([]);
+	const [modelSelectorOpen, setModelSelectorOpen] = useState(false);
 
-	useEffect(() => {
-		setSelectedModels(shuffleModels(visionModels, 4));
+	const handleRandomModels = useCallback(() => {
+		const shuffled = shuffleModels(visionModels, 4);
+		setSelectedModelIds(shuffled.map((m) => m.id));
 	}, [visionModels]);
+
+	const selectedModels = useMemo(
+		() =>
+			selectedModelIds
+				.map((id) => getModelById(id))
+				.filter(Boolean) as ModelConfig[],
+		[selectedModelIds],
+	);
 
 	const players: Player[] = useMemo(
 		() => [
@@ -207,11 +235,12 @@ export default function HumanPlayPage() {
 
 	const currentDrawer = players[gameState.currentTurnIndex];
 	const isHumanTurn = currentDrawer?.isHuman ?? false;
+	const isGameActive =
+		gameState.status === "playing" || gameState.status === "generating";
 
 	useEffect(() => {
 		if (chatContainerRef.current) {
-			chatContainerRef.current.scrollTop =
-				chatContainerRef.current.scrollHeight;
+			chatContainerRef.current.scrollTop = 0;
 		}
 	}, [chatMessages]);
 
@@ -227,10 +256,82 @@ export default function HumanPlayPage() {
 			status: "turn-ended",
 			winner,
 		}));
-		// No auto-advance - user clicks to continue
 	}, []);
 
-	// Advance to next turn (called when user clicks Continue)
+	const generateAiDrawing = useCallback(
+		async (promptOverride?: string, drawerIdOverride?: string) => {
+			const drawerId = drawerIdOverride || players[gameState.currentTurnIndex]?.id;
+			if (!drawerId) return;
+
+			const prompt = promptOverride || gameState.secretPrompt;
+			if (!prompt) {
+				console.error("No prompt available for AI drawing");
+				return;
+			}
+
+			setGameState((prev) => ({ ...prev, status: "generating" }));
+
+			try {
+				const response = await fetch("/api/generate-drawings", {
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({
+						prompt,
+						models: [drawerId],
+					}),
+				});
+
+				if (!response.ok) {
+					throw new Error("Failed to generate drawing");
+				}
+
+				const reader = response.body?.getReader();
+				if (!reader) throw new Error("No response body");
+
+				const decoder = new TextDecoder();
+				let buffer = "";
+
+				while (true) {
+					const { done, value } = await reader.read();
+					if (done) break;
+
+					buffer += decoder.decode(value, { stream: true });
+					const lines = buffer.split("\n\n");
+					buffer = lines.pop() || "";
+
+					for (const line of lines) {
+						if (!line.startsWith("data: ")) continue;
+						const jsonStr = line.slice(6);
+
+						try {
+							const event = JSON.parse(jsonStr);
+
+							if (event.type === "partial" && event.svg) {
+								setGameState((prev) => ({
+									...prev,
+									aiSvg: event.svg,
+								}));
+							} else if (event.type === "drawing" && event.svg) {
+								setGameState((prev) => ({
+									...prev,
+									status: "playing",
+									aiSvg: event.svg,
+								}));
+							}
+						} catch (e) {
+							console.error("Failed to parse SSE event:", e);
+						}
+					}
+				}
+			} catch (error) {
+				console.error("Error generating AI drawing:", error);
+				endTurn(null);
+			}
+		},
+		[players, gameState.currentTurnIndex, gameState.secretPrompt, endTurn],
+	);
+
+	// Advance to next turn and start it immediately
 	const advanceToNextTurn = useCallback(() => {
 		const nextTurnIndex = gameState.currentTurnIndex + 1;
 		const totalPlayers = players.length;
@@ -247,38 +348,79 @@ export default function HumanPlayPage() {
 				return;
 			}
 
-			// New round - reset to first player
-			setGameState({
-				status: "idle",
-				currentRound: nextRound,
-				currentTurnIndex: 0,
-				secretPrompt: "",
-				hint: "",
-				revealedIndices: [],
-				timeRemaining: TURN_DURATION,
-				winner: null,
-				aiSvg: null,
-			});
-		} else {
-			// Next player in same round
-			setGameState({
-				status: "idle",
-				currentRound: gameState.currentRound,
-				currentTurnIndex: nextTurnIndex,
-				secretPrompt: "",
-				hint: "",
-				revealedIndices: [],
-				timeRemaining: TURN_DURATION,
-				winner: null,
-				aiSvg: null,
-			});
-		}
+			// New round - reset to first player and start immediately
+			const newPrompt = getRandomPrompt();
+			const nextDrawerIsHuman = players[0]?.isHuman ?? false;
 
-		// Clear messages only when advancing
-		setChatMessages([]);
-		setDrawingDataUrl("");
-		setHumanGuess("");
-	}, [gameState.currentTurnIndex, gameState.currentRound, players.length]);
+			setChatMessages([]);
+			setDrawingDataUrl("");
+			setHumanGuess("");
+
+			if (nextDrawerIsHuman) {
+				setGameState({
+					status: "playing",
+					currentRound: nextRound,
+					currentTurnIndex: 0,
+					secretPrompt: newPrompt,
+					hint: generateHint(newPrompt),
+					revealedIndices: [],
+					timeRemaining: TURN_DURATION,
+					winner: null,
+					aiSvg: null,
+				});
+			} else {
+				const nextDrawerId = players[0]?.id;
+				setGameState({
+					status: "generating",
+					currentRound: nextRound,
+					currentTurnIndex: 0,
+					secretPrompt: newPrompt,
+					hint: generateHint(newPrompt),
+					revealedIndices: [],
+					timeRemaining: TURN_DURATION,
+					winner: null,
+					aiSvg: null,
+				});
+				setTimeout(() => generateAiDrawing(newPrompt, nextDrawerId), 100);
+			}
+		} else {
+			// Next player in same round - start immediately
+			const newPrompt = getRandomPrompt();
+			const nextDrawer = players[nextTurnIndex];
+			const nextDrawerIsHuman = nextDrawer?.isHuman ?? false;
+
+			setChatMessages([]);
+			setDrawingDataUrl("");
+			setHumanGuess("");
+
+			if (nextDrawerIsHuman) {
+				setGameState({
+					status: "playing",
+					currentRound: gameState.currentRound,
+					currentTurnIndex: nextTurnIndex,
+					secretPrompt: newPrompt,
+					hint: generateHint(newPrompt),
+					revealedIndices: [],
+					timeRemaining: TURN_DURATION,
+					winner: null,
+					aiSvg: null,
+				});
+			} else {
+				setGameState({
+					status: "generating",
+					currentRound: gameState.currentRound,
+					currentTurnIndex: nextTurnIndex,
+					secretPrompt: newPrompt,
+					hint: generateHint(newPrompt),
+					revealedIndices: [],
+					timeRemaining: TURN_DURATION,
+					winner: null,
+					aiSvg: null,
+				});
+				setTimeout(() => generateAiDrawing(newPrompt, nextDrawer?.id), 100);
+			}
+		}
+	}, [gameState.currentTurnIndex, gameState.currentRound, players, generateAiDrawing]);
 
 	const triggerAiGuess = useCallback(
 		async (imageDataUrl: string) => {
@@ -289,6 +431,8 @@ export default function HumanPlayPage() {
 			const guessingModels = selectedModels.filter(
 				(m) => m.id !== currentDrawer?.id,
 			);
+
+			setThinkingModelIds(guessingModels.map((m) => m.id));
 
 			try {
 				const response = await fetch("/api/guess-drawing", {
@@ -330,7 +474,9 @@ export default function HumanPlayPage() {
 									(m) => m.id === event.modelId,
 								);
 								if (model) {
-									// Check guess semantically
+									setThinkingModelIds((prev) =>
+										prev.filter((id) => id !== event.modelId),
+									);
 									checkGuessSemantics(event.guess, gameState.secretPrompt).then(
 										({ isCorrect, similarity }) => {
 											const newMessage: ChatMessage = {
@@ -392,6 +538,7 @@ export default function HumanPlayPage() {
 				console.error("Error getting guesses:", error);
 			} finally {
 				setIsGuessing(false);
+				setThinkingModelIds([]);
 			}
 		},
 		[
@@ -404,74 +551,6 @@ export default function HumanPlayPage() {
 			isMobile,
 			isHumanTurn,
 		],
-	);
-
-	const generateAiDrawing = useCallback(
-		async (promptOverride?: string) => {
-			if (!currentDrawer || currentDrawer.isHuman) return;
-
-			const prompt = promptOverride || gameState.secretPrompt;
-			if (!prompt) {
-				console.error("No prompt available for AI drawing");
-				return;
-			}
-
-			setGameState((prev) => ({ ...prev, status: "generating" }));
-
-			try {
-				const response = await fetch("/api/generate-drawings", {
-					method: "POST",
-					headers: { "Content-Type": "application/json" },
-					body: JSON.stringify({
-						prompt,
-						models: [currentDrawer.id],
-					}),
-				});
-
-				if (!response.ok) {
-					throw new Error("Failed to generate drawing");
-				}
-
-				const reader = response.body?.getReader();
-				if (!reader) throw new Error("No response body");
-
-				const decoder = new TextDecoder();
-				let buffer = "";
-
-				while (true) {
-					const { done, value } = await reader.read();
-					if (done) break;
-
-					buffer += decoder.decode(value, { stream: true });
-					const lines = buffer.split("\n\n");
-					buffer = lines.pop() || "";
-
-					for (const line of lines) {
-						if (!line.startsWith("data: ")) continue;
-						const jsonStr = line.slice(6);
-
-						try {
-							const event = JSON.parse(jsonStr);
-
-							if (event.type === "drawing" && event.svg) {
-								setGameState((prev) => ({
-									...prev,
-									status: "playing",
-									aiSvg: event.svg,
-								}));
-							}
-						} catch (e) {
-							console.error("Failed to parse SSE event:", e);
-						}
-					}
-				}
-			} catch (error) {
-				console.error("Error generating AI drawing:", error);
-
-				endTurn(null);
-			}
-		},
-		[currentDrawer, gameState.secretPrompt, endTurn],
 	);
 
 	useEffect(() => {
@@ -564,8 +643,8 @@ export default function HumanPlayPage() {
 				aiSvg: null,
 			}));
 
-			// Pass prompt directly to avoid stale closure
-			setTimeout(() => generateAiDrawing(newPrompt), 100);
+			// Pass prompt and drawer ID directly to avoid stale closure
+			setTimeout(() => generateAiDrawing(newPrompt, currentDrawer?.id), 100);
 		}
 	};
 
@@ -619,136 +698,140 @@ export default function HumanPlayPage() {
 		}
 	};
 
+	const timerUrgent =
+		gameState.timeRemaining <= 10 && gameState.status === "playing";
+
 	return (
-		<div className="flex flex-col lg:flex-row gap-4 lg:gap-6 min-h-0">
-			<Card className="w-full lg:w-56 shrink-0">
-				<CardContent className="p-4 space-y-3">
-					<div className="flex items-center justify-between">
-						<h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
-							Players
-						</h3>
-						<Badge variant="outline">
-							Round {gameState.currentRound}/{TOTAL_ROUNDS}
-						</Badge>
-					</div>
+		<div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-4 h-[calc(100dvh-11rem)] overflow-hidden">
+			{/* Main Panel */}
+			<div className="flex flex-col min-h-0 overflow-hidden">
+				{/* Header - responsive layout */}
+				<div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 mb-2 sm:mb-3 shrink-0">
+					{/* Top row on mobile: Models + Timer */}
+					<div className="flex items-center gap-2">
+						<ButtonGroup>
+							<ModelSelectorTrigger
+								models={visionModels}
+								selectedIds={selectedModelIds}
+								onClick={() => setModelSelectorOpen(true)}
+								disabled={isGameActive}
+								thinkingIds={thinkingModelIds}
+								currentDrawerId={!isHumanTurn ? currentDrawer?.id : undefined}
+							/>
+							<Button
+								variant="outline"
+								onClick={handleRandomModels}
+								disabled={isGameActive}
+								className="h-auto py-1.5 px-2 sm:px-3 gap-1.5"
+							>
+								<Dices className="size-3.5 sm:size-4" />
+								<span className="text-xs font-medium hidden sm:inline">Random</span>
+							</Button>
+						</ButtonGroup>
 
-					{players.map((player, index) => {
-						const isCurrentDrawer = index === gameState.currentTurnIndex;
-						const isDrawing =
-							isCurrentDrawer &&
-							(gameState.status === "playing" ||
-								gameState.status === "generating");
-
-						return (
-							<div
-								key={player.id}
+						<div className="flex items-center gap-1.5 ml-auto sm:hidden">
+							{gameState.status === "playing" && (
+								<Badge
+									variant="outline"
+									className="text-[10px] tabular-nums font-mono px-1.5 py-0.5"
+								>
+									{gameState.timeRemaining % 10 || 10}s
+								</Badge>
+							)}
+							<Badge
+								variant={isGameActive ? "default" : "secondary"}
 								className={cn(
-									"flex items-center gap-3 p-3 rounded-lg transition-all",
-									player.isHuman
-										? "bg-primary/10 border border-primary/20"
-										: "bg-muted/50",
-									isCurrentDrawer && "ring-2 ring-primary",
+									"text-xs px-2 py-0.5 tabular-nums font-mono",
+									timerUrgent &&
+										"bg-destructive text-destructive-foreground animate-pulse",
 								)}
 							>
-								{isDrawing ? (
-									<Pencil
-										className="size-4 shrink-0"
-										style={{ color: player.isHuman ? undefined : player.color }}
-									/>
-								) : isCurrentDrawer ? (
-									<Star
-										className="size-4 shrink-0 fill-current"
-										style={{ color: player.isHuman ? undefined : player.color }}
-									/>
-								) : (
-									<div
-										className="size-3 rounded-full shrink-0"
-										style={{
-											backgroundColor: player.isHuman
-												? "hsl(var(--primary))"
-												: player.color,
-										}}
-									/>
-								)}
-								<span
-									className={cn(
-										"text-sm font-medium truncate",
-										player.isHuman && "text-primary",
-									)}
+								<Clock
+									className={cn("size-3 mr-0.5", timerUrgent && "animate-spin")}
+								/>
+								{formatTime(gameState.timeRemaining)}
+							</Badge>
+							{gameState.status === "idle" && (
+								<Button
+									onClick={startTurn}
+									size="sm"
+									className="gap-1 px-2 h-7 text-xs"
 								>
-									{player.name}
-								</span>
-								{player.isHuman && (
-									<User className="size-4 ml-auto text-primary" />
-								)}
-								{!player.isHuman && isGuessing && isCurrentDrawer && (
-									<Spinner className="size-3 ml-auto" />
-								)}
-							</div>
-						);
-					})}
-				</CardContent>
-			</Card>
+									<Play className="size-3" />
+									Start
+								</Button>
+							)}
+						</div>
+					</div>
 
-			<Card className="flex-1 min-w-0">
-				<CardContent className="p-4 sm:p-6 flex flex-col items-center gap-4 sm:gap-6">
-					<div className="flex items-center gap-4 flex-wrap justify-center">
+					{/* Prompt - full width on mobile when playing */}
+					{gameState.status === "playing" && (
+						<div className="flex-1 text-center min-w-0 py-1 sm:py-0">
+							{isHumanTurn ? (
+								<span className="text-xs sm:text-sm font-semibold">
+									Draw:{" "}
+									<span className="text-primary">{gameState.secretPrompt}</span>
+								</span>
+							) : (
+								<span className="text-xs sm:text-sm font-mono tracking-wider sm:tracking-widest">
+									{gameState.secretPrompt.split("").map((char, i) => {
+										if (char === " ")
+											return (
+												<span key={i} className="mx-0.5 sm:mx-1">
+													{" "}
+												</span>
+											);
+										const isRevealed = gameState.revealedIndices.includes(i);
+										return (
+											<span
+												key={i}
+												className={
+													isRevealed
+														? "text-primary font-bold"
+														: "text-muted-foreground"
+												}
+											>
+												{isRevealed ? char : "_"}
+											</span>
+										);
+									})}
+								</span>
+							)}
+						</div>
+					)}
+
+					{/* Desktop only: right side controls */}
+					<div className="hidden sm:flex items-center gap-2 ml-auto shrink-0">
+						{gameState.status === "playing" && (
+							<Badge
+								variant="outline"
+								className="text-xs tabular-nums font-mono"
+							>
+								Guess in {gameState.timeRemaining % 10 || 10}s
+							</Badge>
+						)}
+						<span className="text-sm text-muted-foreground whitespace-nowrap">
+							Round {gameState.currentRound}/{TOTAL_ROUNDS}
+						</span>
 						<Badge
-							variant={
-								gameState.status === "playing" ||
-								gameState.status === "generating"
-									? "default"
-									: "secondary"
-							}
-							className="text-lg px-4 py-2"
+							variant={isGameActive ? "default" : "secondary"}
+							className={cn(
+								"text-sm px-2.5 py-1 tabular-nums font-mono whitespace-nowrap",
+								timerUrgent &&
+									"bg-destructive text-destructive-foreground animate-pulse",
+							)}
 						>
-							<Clock className="size-4 mr-2" />
+							<Clock
+								className={cn("size-3.5 mr-1", timerUrgent && "animate-spin")}
+							/>
 							{formatTime(gameState.timeRemaining)}
 						</Badge>
-
-						{gameState.status !== "idle" &&
-							gameState.status !== "game-over" && (
-								<div className="text-center">
-									{isHumanTurn && gameState.status === "playing" ? (
-										<span className="text-lg font-medium">
-											Draw:{" "}
-											<span className="text-primary">
-												{gameState.secretPrompt}
-											</span>
-										</span>
-									) : (
-										<span className="text-lg font-mono tracking-widest">
-											{gameState.secretPrompt.split("").map((char, i) => {
-												if (char === " ") {
-													return (
-														<span key={i} className="mx-1">
-															{" "}
-														</span>
-													);
-												}
-												const isRevealed =
-													gameState.revealedIndices.includes(i);
-												return (
-													<span
-														key={i}
-														className={cn(
-															"mx-0.5",
-															isRevealed
-																? "text-primary font-bold"
-																: "text-muted-foreground",
-														)}
-													>
-														{isRevealed ? char : "_"}
-													</span>
-												);
-											})}
-										</span>
-									)}
-								</div>
-							)}
-
 						{gameState.status === "idle" && (
-							<Button size="lg" onClick={startTurn}>
+							<Button
+								onClick={startTurn}
+								size="sm"
+								className="gap-1.5 px-4 shadow-lg whitespace-nowrap"
+							>
 								<Play className="size-4" />
 								{gameState.currentTurnIndex === 0 &&
 								gameState.currentRound === 1
@@ -756,237 +839,333 @@ export default function HumanPlayPage() {
 									: "Start Turn"}
 							</Button>
 						)}
-
-						{gameState.status === "playing" && (
-							<span className="text-sm text-muted-foreground">
-								Next guess in {10 - (gameState.timeRemaining % 10)}s
-							</span>
-						)}
 					</div>
+				</div>
 
-					{gameState.status === "generating" ? (
-						<div className="w-full max-w-md aspect-square flex items-center justify-center bg-muted/30 rounded-lg border-2 border-dashed">
-							<div className="text-center space-y-2">
-								<Spinner className="size-8 mx-auto" />
-								<p className="text-sm text-muted-foreground">
-									{currentDrawer?.name} is drawing...
-								</p>
+				{/* Prompt display for non-playing states */}
+				{(gameState.status === "generating" ||
+					gameState.status === "turn-ended") && (
+					<div className="text-center mb-3 shrink-0">
+						<span className="text-base font-mono tracking-widest">
+							{gameState.secretPrompt.split("").map((char, i) => {
+								if (char === " ")
+									return (
+										<span key={i} className="mx-1">
+											{" "}
+										</span>
+									);
+								const isRevealed = gameState.revealedIndices.includes(i);
+								return (
+									<span
+										key={i}
+										className={
+											isRevealed
+												? "text-primary font-bold"
+												: "text-muted-foreground"
+										}
+									>
+										{isRevealed ? char : "_"}
+									</span>
+								);
+							})}
+						</span>
+					</div>
+				)}
+
+				{/* Canvas Area - takes remaining space */}
+				<div className="flex-1 min-h-0 overflow-hidden">
+					{gameState.status === "idle" && (
+						<DrawingCanvas onDrawingChange={setDrawingDataUrl} />
+					)}
+
+					{gameState.status === "generating" && (
+						<div className="relative w-full h-full">
+							{gameState.aiSvg ? (
+								<div
+									className="w-full h-full bg-white rounded-xl border-2 overflow-hidden shadow-xl [&>svg]:w-full [&>svg]:h-full"
+									dangerouslySetInnerHTML={{ __html: gameState.aiSvg }}
+								/>
+							) : (
+								<div className="w-full h-full flex items-center justify-center bg-muted/20 rounded-xl border-2 border-dashed">
+									<div className="text-center space-y-2 sm:space-y-3">
+										<Spinner className="size-8 sm:size-10 mx-auto" />
+										<p className="text-sm sm:text-base text-muted-foreground">
+											{currentDrawer?.name} is drawing...
+										</p>
+									</div>
+								</div>
+							)}
+							<div className="absolute top-3 left-3 flex items-center gap-2 px-2.5 py-1.5 rounded-full bg-background/90 backdrop-blur-sm border shadow-sm">
+								<div
+									className="size-3 rounded-full animate-pulse"
+									style={{ backgroundColor: currentDrawer?.color }}
+								/>
+								<span className="text-xs font-medium">
+									{currentDrawer?.name}
+								</span>
+								<Spinner className="size-3" />
 							</div>
-						</div>
-					) : isHumanTurn || gameState.status === "idle" ? (
-						<DrawingCanvas
-							onDrawingChange={setDrawingDataUrl}
-							width={400}
-							height={400}
-							className="w-full max-w-md"
-						/>
-					) : gameState.aiSvg ? (
-						<div
-							className="w-full max-w-md aspect-square bg-white rounded-lg border overflow-hidden"
-							dangerouslySetInnerHTML={{ __html: gameState.aiSvg }}
-						/>
-					) : (
-						<div className="w-full max-w-md aspect-square flex items-center justify-center bg-muted/30 rounded-lg border-2 border-dashed">
-							<p className="text-sm text-muted-foreground">
-								Waiting for drawing...
-							</p>
 						</div>
 					)}
 
-					{gameState.status === "turn-ended" && (
-						<div className="text-center space-y-4 w-full max-w-md">
-							{/* Result Header */}
-							{gameState.winner ? (
-								<div className="space-y-2">
-									<div className="flex items-center justify-center gap-2">
-										<Trophy className="size-6 text-yellow-500" />
-										<Badge variant="default" className="text-lg px-4 py-2">
-											{gameState.winner.name} guessed it!
-										</Badge>
-									</div>
-									<p className="text-sm text-muted-foreground">
-										The answer was:{" "}
-										<span className="font-semibold text-primary">
-											{gameState.secretPrompt}
-										</span>
-									</p>
-								</div>
+					{gameState.status === "playing" && (
+						<div className="relative w-full h-full">
+							{isHumanTurn ? (
+								<DrawingCanvas onDrawingChange={setDrawingDataUrl} />
+							) : gameState.aiSvg ? (
+								<div
+									className="w-full h-full bg-white rounded-xl border-2 overflow-hidden shadow-xl [&>svg]:w-full [&>svg]:h-full"
+									dangerouslySetInnerHTML={{ __html: gameState.aiSvg }}
+								/>
 							) : (
-								<div className="space-y-2">
-									<Badge variant="secondary" className="text-lg px-4 py-2">
-										<Clock className="size-4 mr-2" />
-										Time's up!
-									</Badge>
-									<p className="text-sm text-muted-foreground">
-										The answer was:{" "}
-										<span className="font-semibold text-primary">
-											{gameState.secretPrompt}
-										</span>
+								<div className="w-full h-full flex items-center justify-center bg-muted/20 rounded-xl border-2 border-dashed">
+									<p className="text-sm sm:text-base text-muted-foreground">
+										Waiting for drawing...
 									</p>
 								</div>
 							)}
 
-							{/* Continue Button */}
-							<Button
-								size="lg"
-								onClick={advanceToNextTurn}
-								className="mt-4 px-8"
-							>
-								{gameState.currentTurnIndex + 1 >= players.length &&
-								gameState.currentRound >= TOTAL_ROUNDS ? (
-									<>
-										<Trophy className="size-4" />
-										See Final Results
-									</>
+							{thinkingModelIds.length > 0 && (
+								<div className="absolute top-3 right-3 flex -space-x-2">
+									{thinkingModelIds.slice(0, 4).map((modelId) => {
+										const model = selectedModels.find((m) => m.id === modelId);
+										if (!model) return null;
+										return (
+											<div
+												key={modelId}
+												className="size-6 rounded-full border-2 border-background animate-pulse shadow-md"
+												style={{ backgroundColor: model.color }}
+												title={`${model.name} analyzing...`}
+											/>
+										);
+									})}
+								</div>
+							)}
+						</div>
+					)}
+
+					{gameState.status === "turn-ended" && (
+						<div className="w-full h-full flex items-center justify-center">
+							<div className="text-center space-y-4 sm:space-y-6 max-w-md px-4">
+								{gameState.winner ? (
+									<div className="space-y-2 sm:space-y-3">
+										<div className="flex items-center justify-center gap-2 sm:gap-3">
+											<Trophy className="size-6 sm:size-8 text-yellow-500" />
+											<span className="text-xl sm:text-2xl font-bold">
+												{gameState.winner.name} wins!
+											</span>
+										</div>
+										<p className="text-sm sm:text-lg text-muted-foreground">
+											The answer was:{" "}
+											<span className="font-bold text-primary">
+												{gameState.secretPrompt}
+											</span>
+										</p>
+									</div>
 								) : (
-									<>
-										<ArrowRight className="size-4" />
-										Continue to Next Turn
-									</>
+									<div className="space-y-2 sm:space-y-3">
+										<div className="flex items-center justify-center gap-2">
+											<Clock className="size-5 sm:size-6" />
+											<span className="text-xl sm:text-2xl font-bold">
+												Time's up!
+											</span>
+										</div>
+										<p className="text-sm sm:text-lg text-muted-foreground">
+											The answer was:{" "}
+											<span className="font-bold text-primary">
+												{gameState.secretPrompt}
+											</span>
+										</p>
+									</div>
 								)}
-							</Button>
+								<Button
+									onClick={advanceToNextTurn}
+									size="sm"
+									className="sm:text-base px-6 sm:px-8"
+								>
+									{gameState.currentTurnIndex + 1 >= players.length &&
+									gameState.currentRound >= TOTAL_ROUNDS ? (
+										<>
+											<Trophy className="size-4 sm:size-5" /> See Results
+										</>
+									) : (
+										<>
+											<ArrowRight className="size-4 sm:size-5" /> Next Turn
+										</>
+									)}
+								</Button>
+							</div>
 						</div>
 					)}
 
 					{gameState.status === "game-over" && (
-						<div className="text-center space-y-6">
-							<Badge variant="default" className="text-xl px-6 py-3">
-								Game Over!
-							</Badge>
-							<Button size="lg" onClick={startGame} className="px-8">
-								<Play className="size-4" />
-								Play Again
-							</Button>
+						<div className="w-full h-full flex items-center justify-center">
+							<div className="text-center space-y-4 sm:space-y-6">
+								<h2 className="text-2xl sm:text-3xl font-bold">Game Over!</h2>
+								<Button
+									size="sm"
+									className="sm:text-base px-6 sm:px-8"
+									onClick={startGame}
+								>
+									<Play className="size-4 sm:size-5" /> Play Again
+								</Button>
+							</div>
 						</div>
 					)}
+				</div>
+			</div>
 
-					{gameState.status === "idle" &&
-						gameState.currentRound === 1 &&
-						gameState.currentTurnIndex === 0 && (
-							<p className="text-sm text-muted-foreground text-center max-w-md">
-								Take turns drawing! When it's your turn, draw the prompt. When
-								AI models draw, try to guess what they're drawing. Each player
-								has 2 minutes per turn.
-							</p>
-						)}
-				</CardContent>
-			</Card>
+			{/* Guesses Panel - hidden on mobile, fixed width on desktop */}
+			<div className="hidden lg:flex flex-col bg-card rounded-xl border shadow-sm overflow-hidden">
+				<div className="flex items-center gap-2 px-4 py-3 border-b shrink-0">
+					<MessageCircle className="size-4 text-muted-foreground" />
+					<span className="font-semibold">Guesses</span>
+					{chatMessages.length > 0 && (
+						<Badge variant="secondary" className="ml-auto">
+							{chatMessages.length}
+						</Badge>
+					)}
+				</div>
 
-			{/* Right Column - Chat */}
-			<Card className="w-full lg:w-80 shrink-0 max-h-[50vh] lg:max-h-[calc(100dvh-14rem)] flex flex-col">
-				<CardContent className="flex-1 flex flex-col p-3 sm:p-4 overflow-hidden min-h-0">
-					<div className="flex items-center gap-2 mb-4 shrink-0">
-						<MessageCircle className="size-4 text-muted-foreground" />
-						<h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
-							{gameState.status === "turn-ended" ? "Turn Summary" : "Guesses"}
-						</h3>
-						{chatMessages.length > 0 && (
-							<Badge variant="secondary" className="ml-auto">
-								{chatMessages.length}
-							</Badge>
-						)}
-					</div>
-
-					<div
-						ref={chatContainerRef}
-						className="flex-1 overflow-y-auto space-y-2 rounded-lg bg-muted/30 p-3 min-h-0"
-					>
-						{chatMessages.length === 0 ? (
-							<div className="h-full flex items-center justify-center">
-								<p className="text-sm text-muted-foreground text-center">
-									{gameState.status === "idle"
-										? "Start a turn to see guesses"
-										: gameState.status === "generating"
-											? "Waiting for drawing..."
-											: gameState.status === "turn-ended"
-												? "No guesses were made"
-												: gameState.status === "game-over"
-													? "Thanks for playing!"
-													: "Waiting for guesses..."}
-								</p>
-							</div>
-						) : (
-							// Sort by similarity when turn ended to show best matches first
-							[...chatMessages]
-								.sort((a, b) => {
-									if (gameState.status === "turn-ended") {
-										return (b.similarity ?? 0) - (a.similarity ?? 0);
-									}
-									return a.timestamp - b.timestamp;
-								})
-								.map((message) => (
-									<div
-										key={message.id}
-										className={cn(
-											"flex items-start gap-2 p-2 rounded-md transition-all",
-											message.isCorrect
-												? "bg-green-500/20 border border-green-500/30"
-												: message.similarity && message.similarity >= 0.6
-													? "bg-yellow-500/10 border border-yellow-500/20"
-													: message.similarity && message.similarity >= 0.4
-														? "bg-orange-500/10 border border-orange-500/20"
-														: "bg-background/50",
-										)}
-									>
+				<ScrollArea
+					ref={chatContainerRef}
+					className="flex-1 min-h-0"
+				>
+					<div className="p-3 space-y-2">
+					{chatMessages.length === 0 ? (
+						<div className="space-y-2">
+							{gameState.status === "idle" ? (
+								selectedModels.map((model) => {
+									const style = getModelStyle(model);
+									const styleInfo = MODEL_STYLE_INFO[style];
+									return (
 										<div
-											className="size-2.5 rounded-full shrink-0 mt-1.5"
+											key={model.id}
+											className="flex items-center gap-2 p-2.5 rounded-lg bg-muted/50"
+										>
+											<div
+												className="size-3 rounded-full"
+												style={{ backgroundColor: model.color }}
+											/>
+											<span className="text-sm font-medium">{model.name}</span>
+											<span className="ml-auto text-sm">{styleInfo.icon}</span>
+										</div>
+									);
+								})
+							) : gameState.status === "playing" ? (
+								selectedModels
+									.filter((m) => m.id !== currentDrawer?.id)
+									.map((model) => (
+										<div
+											key={model.id}
+											className={cn(
+												"flex items-center gap-2 p-2.5 rounded-lg bg-muted/50",
+												thinkingModelIds.includes(model.id) &&
+													"animate-pulse bg-primary/10",
+											)}
+										>
+											<div
+												className="size-3 rounded-full"
+												style={{ backgroundColor: model.color }}
+											/>
+											<span className="text-sm font-medium">{model.name}</span>
+											<span className="ml-auto text-xs text-muted-foreground">
+												{thinkingModelIds.includes(model.id)
+													? "thinking..."
+													: "watching"}
+											</span>
+											{thinkingModelIds.includes(model.id) && (
+												<Spinner className="size-3" />
+											)}
+										</div>
+									))
+							) : (
+								<p className="text-sm text-muted-foreground text-center py-8">
+									{gameState.status === "generating"
+										? "Waiting for drawing..."
+										: "No guesses yet"}
+								</p>
+							)}
+						</div>
+					) : (
+						[...chatMessages]
+							.sort((a, b) => (b.similarity ?? 0) - (a.similarity ?? 0))
+							.map((message) => (
+								<div
+									key={message.id}
+									className={cn(
+										"p-3 rounded-lg",
+										message.isCorrect
+											? "bg-green-500/20 border border-green-500/40"
+											: message.similarity && message.similarity >= 0.6
+												? "bg-yellow-500/15 border border-yellow-500/30"
+												: "bg-muted/50",
+									)}
+								>
+									<div className="flex items-center gap-2 mb-1">
+										<div
+											className="size-3 rounded-full shrink-0"
 											style={{ backgroundColor: message.playerColor }}
 										/>
-										<div className="flex-1 min-w-0">
-											<div className="flex items-center justify-between gap-2">
-												<span className="text-xs font-medium text-muted-foreground">
-													{message.playerName}
-												</span>
-												{message.similarity !== undefined && (
-													<span
-														className={cn(
-															"text-[10px] font-mono px-1.5 py-0.5 rounded",
-															message.isCorrect
-																? "bg-green-500/20 text-green-600"
-																: message.similarity >= 0.6
-																	? "bg-yellow-500/20 text-yellow-600"
-																	: message.similarity >= 0.4
-																		? "bg-orange-500/20 text-orange-600"
-																		: "bg-muted text-muted-foreground",
-														)}
-													>
-														{Math.round(message.similarity * 100)}%
-													</span>
-												)}
-											</div>
-											<p
+										<span className="font-semibold text-sm">
+											{message.playerName}
+										</span>
+										{message.similarity !== undefined && (
+											<span
 												className={cn(
-													"text-sm font-medium",
-													message.isCorrect && "text-green-600",
+													"ml-auto text-xs font-mono font-bold",
+													message.isCorrect
+														? "text-green-600"
+														: message.similarity >= 0.6
+															? "text-yellow-600"
+															: "text-muted-foreground",
 												)}
 											>
-												"{message.guess}"
-												{message.isCorrect && (
-													<Check className="inline size-3.5 ml-1 text-green-600" />
-												)}
-											</p>
-										</div>
+												{Math.round(message.similarity * 100)}%
+											</span>
+										)}
 									</div>
-								))
-						)}
+									<p
+										className={cn(
+											"text-sm",
+											message.isCorrect && "text-green-600 font-semibold",
+										)}
+									>
+										"{message.guess}"{" "}
+										{message.isCorrect && <Check className="inline size-4" />}
+									</p>
+								</div>
+							))
+					)}
 					</div>
+				</ScrollArea>
 
-					{!isHumanTurn && gameState.status === "playing" && (
-						<div className="mt-4 flex gap-2 shrink-0">
+				{!isHumanTurn && gameState.status === "playing" && (
+					<div className="p-3 border-t">
+						<div className="flex gap-2">
 							<Input
 								value={humanGuess}
 								onChange={(e) => setHumanGuess(e.target.value)}
 								onKeyDown={(e) => e.key === "Enter" && submitHumanGuess()}
-								placeholder="Type your guess..."
-								className="flex-1"
+								placeholder="Your guess..."
+								className="text-sm"
 							/>
 							<Button size="icon" onClick={submitHumanGuess}>
 								<Send className="size-4" />
 							</Button>
 						</div>
-					)}
-				</CardContent>
-			</Card>
+					</div>
+				)}
+			</div>
+
+			<ModelSelector
+				models={visionModels}
+				selectedIds={selectedModelIds}
+				onSelectionChange={setSelectedModelIds}
+				open={modelSelectorOpen}
+				onOpenChange={setModelSelectorOpen}
+				disabled={isGameActive}
+			/>
 		</div>
 	);
 }

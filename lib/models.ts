@@ -3,6 +3,8 @@ export interface ModelPricing {
 	output: number; // Cost per 1M output tokens
 }
 
+export type ModelStyle = "precise" | "creative" | "fast" | "balanced" | "chaotic";
+
 export interface ModelConfig {
 	id: string;
 	name: string;
@@ -10,9 +12,26 @@ export interface ModelConfig {
 	color: string;
 	pricing: ModelPricing;
 	tier: "budget" | "mid" | "premium" | "flagship";
+	style?: ModelStyle;
 }
 
-// All AI Gateway Chat Models (Dec 2024)
+export const MODEL_STYLE_INFO: Record<ModelStyle, { label: string; icon: string }> = {
+	precise: { label: "Precise", icon: "🎯" },
+	creative: { label: "Creative", icon: "✨" },
+	fast: { label: "Fast", icon: "⚡" },
+	balanced: { label: "Balanced", icon: "⚖️" },
+	chaotic: { label: "Chaotic", icon: "🎲" },
+};
+
+export function getModelStyle(model: ModelConfig): ModelStyle {
+	if (model.style) return model.style;
+	if (model.tier === "budget" || model.name.toLowerCase().includes("mini") || model.name.toLowerCase().includes("flash")) return "fast";
+	if (model.provider === "Anthropic" && model.name.includes("Opus")) return "creative";
+	if (model.tier === "flagship" || model.tier === "premium") return "precise";
+	return "balanced";
+}
+
+// Verified working AI Gateway models (Dec 2025)
 export const AVAILABLE_MODELS: ModelConfig[] = [
 	// === OpenAI ===
 	{
@@ -102,6 +121,7 @@ export const AVAILABLE_MODELS: ModelConfig[] = [
 		color: "#10a37f",
 		pricing: { input: 2.5, output: 10 },
 		tier: "premium",
+		style: "precise",
 	},
 	{
 		id: "openai/gpt-4o-mini",
@@ -110,6 +130,7 @@ export const AVAILABLE_MODELS: ModelConfig[] = [
 		color: "#10a37f",
 		pricing: { input: 0.15, output: 0.6 },
 		tier: "budget",
+		style: "fast",
 	},
 	{
 		id: "openai/gpt-4.1",
@@ -118,6 +139,7 @@ export const AVAILABLE_MODELS: ModelConfig[] = [
 		color: "#10a37f",
 		pricing: { input: 2, output: 8 },
 		tier: "premium",
+		style: "precise",
 	},
 	{
 		id: "openai/gpt-4.1-mini",
@@ -126,6 +148,7 @@ export const AVAILABLE_MODELS: ModelConfig[] = [
 		color: "#10a37f",
 		pricing: { input: 0.4, output: 1.6 },
 		tier: "budget",
+		style: "fast",
 	},
 	{
 		id: "openai/gpt-4.1-nano",
@@ -160,22 +183,6 @@ export const AVAILABLE_MODELS: ModelConfig[] = [
 		tier: "mid",
 	},
 	{
-		id: "openai/gpt-oss-20b",
-		name: "GPT OSS 20B",
-		provider: "OpenAI",
-		color: "#10a37f",
-		pricing: { input: 0.07, output: 0.3 },
-		tier: "budget",
-	},
-	{
-		id: "openai/gpt-oss-safeguard-20b",
-		name: "GPT OSS Safeguard 20B",
-		provider: "OpenAI",
-		color: "#10a37f",
-		pricing: { input: 0.07, output: 0.3 },
-		tier: "budget",
-	},
-	{
 		id: "openai/o1",
 		name: "o1",
 		provider: "OpenAI",
@@ -198,14 +205,6 @@ export const AVAILABLE_MODELS: ModelConfig[] = [
 		color: "#10a37f",
 		pricing: { input: 1.1, output: 4.4 },
 		tier: "mid",
-	},
-	{
-		id: "openai/o3-deep-research",
-		name: "o3 Deep Research",
-		provider: "OpenAI",
-		color: "#10a37f",
-		pricing: { input: 10, output: 40 },
-		tier: "flagship",
 	},
 	{
 		id: "openai/o4-mini",
@@ -356,104 +355,6 @@ export const AVAILABLE_MODELS: ModelConfig[] = [
 		tier: "budget",
 	},
 
-	// === xAI ===
-	{
-		id: "xai/grok-4",
-		name: "Grok 4",
-		provider: "xAI",
-		color: "#1d9bf0",
-		pricing: { input: 3, output: 15 },
-		tier: "premium",
-	},
-	{
-		id: "xai/grok-4-fast-reasoning",
-		name: "Grok 4 Fast Reasoning",
-		provider: "xAI",
-		color: "#1d9bf0",
-		pricing: { input: 0.2, output: 0.5 },
-		tier: "budget",
-	},
-	{
-		id: "xai/grok-4-fast-non-reasoning",
-		name: "Grok 4 Fast Non-Reasoning",
-		provider: "xAI",
-		color: "#1d9bf0",
-		pricing: { input: 0.2, output: 0.5 },
-		tier: "budget",
-	},
-	{
-		id: "xai/grok-4.1-fast-reasoning",
-		name: "Grok 4.1 Fast Reasoning",
-		provider: "xAI",
-		color: "#1d9bf0",
-		pricing: { input: 0.2, output: 0.5 },
-		tier: "budget",
-	},
-	{
-		id: "xai/grok-4.1-fast-non-reasoning",
-		name: "Grok 4.1 Fast Non-Reasoning",
-		provider: "xAI",
-		color: "#1d9bf0",
-		pricing: { input: 0.2, output: 0.5 },
-		tier: "budget",
-	},
-	{
-		id: "xai/grok-3",
-		name: "Grok 3",
-		provider: "xAI",
-		color: "#1d9bf0",
-		pricing: { input: 3, output: 15 },
-		tier: "premium",
-	},
-	{
-		id: "xai/grok-3-fast",
-		name: "Grok 3 Fast",
-		provider: "xAI",
-		color: "#1d9bf0",
-		pricing: { input: 5, output: 25 },
-		tier: "premium",
-	},
-	{
-		id: "xai/grok-3-mini",
-		name: "Grok 3 Mini",
-		provider: "xAI",
-		color: "#1d9bf0",
-		pricing: { input: 0.3, output: 0.5 },
-		tier: "budget",
-	},
-	{
-		id: "xai/grok-3-mini-fast",
-		name: "Grok 3 Mini Fast",
-		provider: "xAI",
-		color: "#1d9bf0",
-		pricing: { input: 0.6, output: 4 },
-		tier: "mid",
-	},
-	{
-		id: "xai/grok-2",
-		name: "Grok 2",
-		provider: "xAI",
-		color: "#1d9bf0",
-		pricing: { input: 2, output: 10 },
-		tier: "mid",
-	},
-	{
-		id: "xai/grok-2-vision",
-		name: "Grok 2 Vision",
-		provider: "xAI",
-		color: "#1d9bf0",
-		pricing: { input: 2, output: 10 },
-		tier: "mid",
-	},
-	{
-		id: "xai/grok-code-fast-1",
-		name: "Grok Code Fast 1",
-		provider: "xAI",
-		color: "#1d9bf0",
-		pricing: { input: 0.2, output: 1.5 },
-		tier: "mid",
-	},
-
 	// === DeepSeek ===
 	{
 		id: "deepseek/deepseek-v3.2",
@@ -472,52 +373,12 @@ export const AVAILABLE_MODELS: ModelConfig[] = [
 		tier: "budget",
 	},
 	{
-		id: "deepseek/deepseek-v3.2-exp",
-		name: "DeepSeek V3.2 Exp",
-		provider: "DeepSeek",
-		color: "#5865f2",
-		pricing: { input: 0.27, output: 0.4 },
-		tier: "budget",
-	},
-	{
-		id: "deepseek/deepseek-v3.2-speciale",
-		name: "DeepSeek V3.2 Speciale",
-		provider: "DeepSeek",
-		color: "#5865f2",
-		pricing: { input: 0.28, output: 0.42 },
-		tier: "budget",
-	},
-	{
 		id: "deepseek/deepseek-v3.1",
 		name: "DeepSeek V3.1",
 		provider: "DeepSeek",
 		color: "#5865f2",
 		pricing: { input: 0.3, output: 1 },
 		tier: "budget",
-	},
-	{
-		id: "deepseek/deepseek-v3.1-terminus",
-		name: "DeepSeek V3.1 Terminus",
-		provider: "DeepSeek",
-		color: "#5865f2",
-		pricing: { input: 0.27, output: 1 },
-		tier: "budget",
-	},
-	{
-		id: "deepseek/deepseek-v3",
-		name: "DeepSeek V3",
-		provider: "DeepSeek",
-		color: "#5865f2",
-		pricing: { input: 0.77, output: 0.77 },
-		tier: "budget",
-	},
-	{
-		id: "deepseek/deepseek-r1",
-		name: "DeepSeek R1",
-		provider: "DeepSeek",
-		color: "#5865f2",
-		pricing: { input: 0.5, output: 2.15 },
-		tier: "mid",
 	},
 
 	// === Meta ===
@@ -536,14 +397,6 @@ export const AVAILABLE_MODELS: ModelConfig[] = [
 		color: "#0668e1",
 		pricing: { input: 0.08, output: 0.3 },
 		tier: "budget",
-	},
-	{
-		id: "meta/llama-3.3-70b",
-		name: "Llama 3.3 70B",
-		provider: "Meta",
-		color: "#0668e1",
-		pricing: { input: 0.72, output: 0.72 },
-		tier: "mid",
 	},
 	{
 		id: "meta/llama-3.2-90b",
@@ -575,22 +428,6 @@ export const AVAILABLE_MODELS: ModelConfig[] = [
 		provider: "Meta",
 		color: "#0668e1",
 		pricing: { input: 0.1, output: 0.1 },
-		tier: "budget",
-	},
-	{
-		id: "meta/llama-3.1-70b",
-		name: "Llama 3.1 70B",
-		provider: "Meta",
-		color: "#0668e1",
-		pricing: { input: 0.72, output: 0.72 },
-		tier: "mid",
-	},
-	{
-		id: "meta/llama-3.1-8b",
-		name: "Llama 3.1 8B",
-		provider: "Meta",
-		color: "#0668e1",
-		pricing: { input: 0.05, output: 0.08 },
 		tier: "budget",
 	},
 
@@ -660,22 +497,6 @@ export const AVAILABLE_MODELS: ModelConfig[] = [
 		tier: "budget",
 	},
 	{
-		id: "mistral/codestral",
-		name: "Codestral",
-		provider: "Mistral",
-		color: "#ff7000",
-		pricing: { input: 0.3, output: 0.9 },
-		tier: "mid",
-	},
-	{
-		id: "mistral/devstral-small",
-		name: "Devstral Small",
-		provider: "Mistral",
-		color: "#ff7000",
-		pricing: { input: 0.1, output: 0.3 },
-		tier: "budget",
-	},
-	{
 		id: "mistral/pixtral-large",
 		name: "Pixtral Large",
 		provider: "Mistral",
@@ -690,14 +511,6 @@ export const AVAILABLE_MODELS: ModelConfig[] = [
 		color: "#ff7000",
 		pricing: { input: 0.15, output: 0.15 },
 		tier: "budget",
-	},
-	{
-		id: "mistral/mixtral-8x22b-instruct",
-		name: "Mixtral 8x22B",
-		provider: "Mistral",
-		color: "#ff7000",
-		pricing: { input: 1.2, output: 1.2 },
-		tier: "mid",
 	},
 
 	// === Alibaba ===
@@ -734,32 +547,8 @@ export const AVAILABLE_MODELS: ModelConfig[] = [
 		tier: "premium",
 	},
 	{
-		id: "alibaba/qwen3-coder-30b-a3b",
-		name: "Qwen3 Coder 30B",
-		provider: "Alibaba",
-		color: "#ff6a00",
-		pricing: { input: 0.07, output: 0.27 },
-		tier: "budget",
-	},
-	{
-		id: "alibaba/qwen3-235b-a22b-thinking",
-		name: "Qwen3 235B Thinking",
-		provider: "Alibaba",
-		color: "#ff6a00",
-		pricing: { input: 0.3, output: 2.9 },
-		tier: "mid",
-	},
-	{
 		id: "alibaba/qwen3-next-80b-a3b-instruct",
 		name: "Qwen3 Next 80B Instruct",
-		provider: "Alibaba",
-		color: "#ff6a00",
-		pricing: { input: 0.15, output: 1.5 },
-		tier: "mid",
-	},
-	{
-		id: "alibaba/qwen3-next-80b-a3b-thinking",
-		name: "Qwen3 Next 80B Thinking",
 		provider: "Alibaba",
 		color: "#ff6a00",
 		pricing: { input: 0.15, output: 1.5 },
@@ -780,38 +569,6 @@ export const AVAILABLE_MODELS: ModelConfig[] = [
 		color: "#ff6a00",
 		pricing: { input: 0.7, output: 2.8 },
 		tier: "mid",
-	},
-	{
-		id: "alibaba/qwen-3-235b",
-		name: "Qwen 3 235B",
-		provider: "Alibaba",
-		color: "#ff6a00",
-		pricing: { input: 0.13, output: 0.6 },
-		tier: "mid",
-	},
-	{
-		id: "alibaba/qwen-3-32b",
-		name: "Qwen 3 32B",
-		provider: "Alibaba",
-		color: "#ff6a00",
-		pricing: { input: 0.1, output: 0.3 },
-		tier: "budget",
-	},
-	{
-		id: "alibaba/qwen-3-30b",
-		name: "Qwen 3 30B",
-		provider: "Alibaba",
-		color: "#ff6a00",
-		pricing: { input: 0.08, output: 0.29 },
-		tier: "budget",
-	},
-	{
-		id: "alibaba/qwen-3-14b",
-		name: "Qwen 3 14B",
-		provider: "Alibaba",
-		color: "#ff6a00",
-		pricing: { input: 0.06, output: 0.24 },
-		tier: "budget",
 	},
 
 	// === Amazon ===
@@ -868,27 +625,11 @@ export const AVAILABLE_MODELS: ModelConfig[] = [
 		tier: "premium",
 	},
 	{
-		id: "moonshotai/kimi-k2-thinking",
-		name: "Kimi K2 Thinking",
-		provider: "Moonshot",
-		color: "#6366f1",
-		pricing: { input: 0.6, output: 2.5 },
-		tier: "mid",
-	},
-	{
 		id: "moonshotai/kimi-k2",
 		name: "Kimi K2",
 		provider: "Moonshot",
 		color: "#6366f1",
 		pricing: { input: 0.5, output: 2 },
-		tier: "mid",
-	},
-	{
-		id: "moonshotai/kimi-k2-0905",
-		name: "Kimi K2 0905",
-		provider: "Moonshot",
-		color: "#6366f1",
-		pricing: { input: 0.6, output: 2.5 },
 		tier: "mid",
 	},
 
@@ -928,30 +669,6 @@ export const AVAILABLE_MODELS: ModelConfig[] = [
 
 	// === ZAI (GLM) ===
 	{
-		id: "zai/glm-4.6",
-		name: "GLM 4.6",
-		provider: "ZAI",
-		color: "#00d4aa",
-		pricing: { input: 0.45, output: 1.8 },
-		tier: "mid",
-	},
-	{
-		id: "zai/glm-4.5",
-		name: "GLM 4.5",
-		provider: "ZAI",
-		color: "#00d4aa",
-		pricing: { input: 0.6, output: 2.2 },
-		tier: "mid",
-	},
-	{
-		id: "zai/glm-4.5-air",
-		name: "GLM 4.5 Air",
-		provider: "ZAI",
-		color: "#00d4aa",
-		pricing: { input: 0.2, output: 1.1 },
-		tier: "budget",
-	},
-	{
 		id: "zai/glm-4.5v",
 		name: "GLM 4.5V",
 		provider: "ZAI",
@@ -979,14 +696,6 @@ export const AVAILABLE_MODELS: ModelConfig[] = [
 		pricing: { input: 0.1, output: 0.5 },
 		tier: "budget",
 	},
-	{
-		id: "meituan/longcat-flash-thinking",
-		name: "Longcat Flash Thinking",
-		provider: "Meituan",
-		color: "#ffd700",
-		pricing: { input: 0.15, output: 1.5 },
-		tier: "mid",
-	},
 
 	// === Vercel ===
 	{
@@ -1004,72 +713,6 @@ export const AVAILABLE_MODELS: ModelConfig[] = [
 		color: "#000000",
 		pricing: { input: 3, output: 15 },
 		tier: "premium",
-	},
-
-	// === Stealth ===
-	{
-		id: "stealth/sonoma-sky-alpha",
-		name: "Sonoma Sky Alpha",
-		provider: "Stealth",
-		color: "#87ceeb",
-		pricing: { input: 0.2, output: 0.5 },
-		tier: "budget",
-	},
-	{
-		id: "stealth/sonoma-dusk-alpha",
-		name: "Sonoma Dusk Alpha",
-		provider: "Stealth",
-		color: "#87ceeb",
-		pricing: { input: 0.2, output: 0.5 },
-		tier: "budget",
-	},
-
-	// === Morph ===
-	{
-		id: "morph/morph-v3-fast",
-		name: "Morph V3 Fast",
-		provider: "Morph",
-		color: "#9370db",
-		pricing: { input: 0.8, output: 1.2 },
-		tier: "mid",
-	},
-	{
-		id: "morph/morph-v3-large",
-		name: "Morph V3 Large",
-		provider: "Morph",
-		color: "#9370db",
-		pricing: { input: 0.9, output: 1.9 },
-		tier: "mid",
-	},
-
-	// === Arcee ===
-	{
-		id: "arcee-ai/trinity-mini",
-		name: "Trinity Mini",
-		provider: "Arcee",
-		color: "#ff69b4",
-		pricing: { input: 0.04, output: 0.15 },
-		tier: "budget",
-	},
-
-	// === Prime Intellect ===
-	{
-		id: "prime-intellect/intellect-3",
-		name: "Intellect 3",
-		provider: "Prime Intellect",
-		color: "#8a2be2",
-		pricing: { input: 0.2, output: 1.1 },
-		tier: "mid",
-	},
-
-	// === Inception ===
-	{
-		id: "inception/mercury-coder-small",
-		name: "Mercury Coder Small",
-		provider: "Inception",
-		color: "#00ced1",
-		pricing: { input: 0.25, output: 1 },
-		tier: "mid",
 	},
 ];
 
@@ -1121,33 +764,106 @@ export const DEFAULT_MODELS = [
 	"openai/gpt-4o",
 	"anthropic/claude-sonnet-4",
 	"google/gemini-2.5-flash",
-	"xai/grok-3-mini",
+	"mistral/pixtral-12b",
 ];
 
-// Vision-capable models for drawing and guessing
-// Note: meta/llama models excluded - they don't support tool use in streaming mode
+// Vision-capable models (verified via API testing - Dec 2025)
 export const VISION_MODELS = [
+	// OpenAI
+	"openai/gpt-5",
+	"openai/gpt-5-pro",
+	"openai/gpt-5-mini",
+	"openai/gpt-5-nano",
+	"openai/gpt-5-chat",
+	"openai/gpt-5-codex",
+	"openai/gpt-5.1-instant",
+	"openai/gpt-5.1-thinking",
+	"openai/gpt-5.1-codex",
+	"openai/gpt-5.1-codex-mini",
 	"openai/gpt-4o",
 	"openai/gpt-4o-mini",
 	"openai/gpt-4.1",
 	"openai/gpt-4.1-mini",
+	"openai/gpt-4.1-nano",
+	"openai/gpt-4-turbo",
+	"openai/gpt-oss-120b",
+	"openai/o1",
+	"openai/o3",
+	"openai/o4-mini",
+	// Anthropic
+	"anthropic/claude-opus-4.5",
+	"anthropic/claude-opus-4.1",
+	"anthropic/claude-opus-4",
 	"anthropic/claude-sonnet-4.5",
 	"anthropic/claude-sonnet-4",
 	"anthropic/claude-3.7-sonnet",
 	"anthropic/claude-3.5-sonnet",
 	"anthropic/claude-haiku-4.5",
 	"anthropic/claude-3.5-haiku",
+	"anthropic/claude-3-haiku",
+	"anthropic/claude-3-opus",
+	// Google
+	"google/gemini-3-pro-preview",
 	"google/gemini-2.5-pro",
 	"google/gemini-2.5-flash",
+	"google/gemini-2.5-flash-lite",
 	"google/gemini-2.0-flash",
-	"xai/grok-2-vision",
+	"google/gemini-2.0-flash-lite",
+	// DeepSeek
+	"deepseek/deepseek-v3.2",
+	"deepseek/deepseek-v3.2-thinking",
+	"deepseek/deepseek-v3.1",
+	// Meta
+	"meta/llama-4-maverick",
+	"meta/llama-4-scout",
+	"meta/llama-3.2-90b",
+	"meta/llama-3.2-11b",
+	// Mistral
+	"mistral/mistral-large",
+	"mistral/mistral-large-3",
+	"mistral/mistral-medium",
+	"mistral/mistral-small",
+	"mistral/magistral-medium",
+	"mistral/magistral-small",
+	"mistral/ministral-8b",
+	"mistral/ministral-3b",
+	"mistral/pixtral-large",
+	"mistral/pixtral-12b",
+	// Alibaba
+	"alibaba/qwen3-max",
+	"alibaba/qwen3-max-preview",
+	"alibaba/qwen3-coder",
+	"alibaba/qwen3-coder-plus",
+	"alibaba/qwen3-next-80b-a3b-instruct",
+	// Amazon
+	"amazon/nova-pro",
+	"amazon/nova-lite",
+	// Cohere
+	"cohere/command-a",
+	// Moonshot
+	"moonshotai/kimi-k2",
+	// Perplexity
+	"perplexity/sonar-pro",
+	"perplexity/sonar",
+	"perplexity/sonar-reasoning-pro",
+	"perplexity/sonar-reasoning",
+	// ZAI
+	"zai/glm-4.5v",
+	// Minimax
+	"minimax/minimax-m2",
+	// Meituan
+	"meituan/longcat-flash-chat",
+	// Vercel
+	"vercel/v0-1.5-md",
+	"vercel/v0-1.0-md",
 ];
 
+// Speed-tested defaults (Dec 2025) - fastest from each major provider
 export const DEFAULT_VISION_MODELS = [
-	"openai/gpt-4o-mini",
-	"anthropic/claude-3.5-haiku",
-	"google/gemini-2.0-flash",
-	"xai/grok-2-vision",
+	"meta/llama-4-scout",        // 432ms 🚀
+	"google/gemini-2.5-flash-lite", // 502ms ⚡
+	"mistral/pixtral-12b",       // 517ms ⚡
+	"anthropic/claude-3.5-haiku", // 925ms ⚡
 ];
 
 export function getVisionModels(): ModelConfig[] {

@@ -1,44 +1,8 @@
-import { Brush, MessageCircle, Sparkles, User } from "lucide-react";
 import Link from "next/link";
-import { GameModeCard } from "@/components/game-mode-card";
+import { GameModes } from "@/components/game-modes";
 import { LogoAnimation } from "@/components/logo-animation";
 import { Button } from "@/components/ui/button";
 import { contentContainer } from "@/lib/grid-patterns";
-
-const gameModes = [
-	{
-		id: "human-play",
-		title: "Human Play",
-		description: "Take turns drawing with AI. Guess each other's creations.",
-		icon: User,
-		href: "/play/human-play",
-		available: true,
-	},
-	{
-		id: "human-judge",
-		title: "Human Judge",
-		description: "AI models draw. You decide which captures the concept best.",
-		icon: Brush,
-		href: "/play/human-judge",
-		available: true,
-	},
-	{
-		id: "model-guess",
-		title: "Model Guess",
-		description: "You draw. AI models compete to guess what it is.",
-		icon: MessageCircle,
-		href: "/play/model-guess",
-		available: true,
-	},
-	{
-		id: "ai-duel",
-		title: "AI Duel",
-		description: "Watch AI models draw and guess each other's creations.",
-		icon: Sparkles,
-		href: "/play/ai-duel",
-		available: true,
-	},
-];
 
 export default function Home() {
 	return (
@@ -63,44 +27,9 @@ export default function Home() {
 			</header>
 
 			{/* Game Modes */}
-			<section className="space-y-4">
-				<div className="flex items-center gap-3">
-					<div className="h-px flex-1 bg-border/50" />
-					<h2 className="text-xs font-medium text-muted-foreground uppercase tracking-widest text-center">
-						Game Modes
-					</h2>
-					<div className="h-px flex-1 bg-border/50" />
-				</div>
-				<div className="grid gap-2">
-					{gameModes.map((mode) => (
-						<GameModeCard key={mode.id} mode={mode} />
-					))}
-				</div>
+			<section>
+				<GameModes />
 			</section>
-
-			{/* Footer */}
-			<footer className="mt-12 pt-6 border-t border-border/50 text-center space-y-4">
-				<div className="flex items-center justify-center gap-4">
-					<Button variant="ghost" size="sm" asChild>
-						<Link href="/leaderboard">Leaderboard</Link>
-					</Button>
-					<span className="text-muted-foreground/30">•</span>
-					<Button variant="ghost" size="sm" asChild>
-						<Link href="/gallery">Gallery</Link>
-					</Button>
-				</div>
-				<p className="text-xs text-muted-foreground/60">
-					Powered by{" "}
-					<a
-						href="https://vercel.com/ai-gateway"
-						target="_blank"
-						rel="noopener noreferrer"
-						className="hover:text-foreground transition-colors"
-					>
-						Vercel AI Gateway
-					</a>
-				</p>
-			</footer>
 		</div>
 	);
 }

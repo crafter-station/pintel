@@ -105,7 +105,7 @@ export function GithubBadge() {
 				href="https://github.com/crafter-station/pintel"
 				target="_blank"
 				rel="noopener noreferrer"
-				className="github-badge fixed top-[80px] right-3 md:top-[72px] md:right-4 z-50 flex items-center gap-1.5 px-2.5 py-1.5 md:px-3 md:py-2 bg-black/40 backdrop-blur-sm border border-white/10 rounded-md opacity-60 hover:opacity-100 transition-opacity duration-300 group"
+				className="github-badge hidden md:flex fixed top-[72px] right-4 z-50 items-center gap-1.5 px-3 py-2 bg-black/40 backdrop-blur-sm border border-white/10 rounded-md opacity-60 hover:opacity-100 transition-opacity duration-300 group"
 				style={{ pointerEvents: "auto" }}
 				initial={{ x: 0, opacity: 0.6 }}
 				animate={

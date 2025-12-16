@@ -18,7 +18,7 @@ const headerWrapperClasses = cn(
 );
 
 const headerContainerClasses = cn(
-	"screen-line-before screen-line-after mx-auto flex h-12 items-center justify-between gap-2 border-x border-edge px-2 after:z-1 after:transition-[background-color] sm:gap-4 md:max-w-3xl",
+	"screen-line-before screen-line-after mx-auto flex h-12 items-center justify-between gap-2 border-x border-edge px-2 after:z-1 after:transition-[background-color] sm:gap-4 max-w-7xl",
 );
 
 export function SiteHeader() {
